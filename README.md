@@ -218,7 +218,7 @@ python scripts/backtest_validation.py --result_file=backtest_results.json
 
 ## 📝 更新日志
 
-### v1.0.0 (2024-12-20)
+### v1.0.0 (2025-09-15)
 - ✨ 初始版本发布
 - 🚀 完整的自动交易系统
 - 📊 Streamlit可视化界面
