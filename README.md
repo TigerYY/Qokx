@@ -1,4 +1,4 @@
-# 🚀 OKX自动交易系统 (Qokx)
+# 🚀 YY自动交易系统 for OKX (Qokx)
 
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -54,14 +54,30 @@
 
 ## 🚀 快速开始
 
+### 一键启动（推荐）
+
+```bash
+# 克隆项目
+git clone https://github.com/TigerYY/Qokx.git
+cd Qokx
+
+# 一键启动系统
+./start_system.sh
+
+# 或使用快速启动
+./quick_start.sh
+```
+
 ### 环境要求
 
 - **Python**: 3.8 或更高版本
+- **Node.js**: 16+ (前端开发)
+- **PostgreSQL**: 12+ (数据库)
 - **操作系统**: macOS / Linux / Windows
 - **内存**: 建议 4GB 以上
 - **网络**: 稳定的互联网连接
 
-### 安装步骤
+### 详细安装步骤
 
 1. **克隆项目**
 ```bash
@@ -69,31 +85,60 @@ git clone https://github.com/TigerYY/Qokx.git
 cd Qokx
 ```
 
-2. **创建虚拟环境**
+2. **配置环境变量**
 ```bash
-python -m venv venv
-source venv/bin/activate  # macOS/Linux
-# 或
-venv\Scripts\activate     # Windows
+# 复制环境变量模板
+cp env.example .env
+
+# 编辑配置文件
+nano .env
 ```
 
-3. **安装依赖**
+3. **启动系统**
 ```bash
-pip install -r requirements.txt
+# 完整启动（推荐）
+./start_system.sh
+
+# 或使用Make命令
+make install    # 安装依赖
+make start      # 启动系统
 ```
 
-4. **配置API密钥**
-```bash
-cp .env.example .env
-# 编辑 .env 文件，填入您的OKX API密钥
-```
+4. **访问系统**
+- 前端界面: http://localhost:3000
+- Streamlit界面: http://localhost:8501
+- API文档: http://localhost:8000/docs
 
-5. **启动应用**
-```bash
-streamlit run app.py
-```
+### 启动脚本说明
 
-应用将在 `http://localhost:8501` 启动
+| 脚本 | 功能 | 使用场景 |
+|------|------|----------|
+| `./start_system.sh` | 完整启动脚本 | 生产环境、完整功能 |
+| `./quick_start.sh` | 快速启动脚本 | 开发环境、快速启动 |
+| `./stop_system.sh` | 停止脚本 | 停止所有服务 |
+| `make start` | Make命令 | 简化操作 |
+
+### 常用命令
+
+```bash
+# 启动系统
+make start
+
+# 停止系统
+make stop
+
+# 重启系统
+make restart
+
+# 查看状态
+make status
+
+# 查看日志
+make logs
+
+# 清理端口
+make clean
+```
 
 ### 配置说明
 

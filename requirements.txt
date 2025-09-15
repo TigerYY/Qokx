@@ -8,14 +8,13 @@ requests==2.31.0
 
 # 数据处理
 pandas>=2.1.3
-numpy>=1.26.2
-pandas-ta>=0.4.71b0
+numpy>=1.21.0,<2.0.0
+# pandas-ta>=0.4.71b0  # 暂时注释，与numpy版本冲突
 
 # 技术分析
 ta-lib>=0.4.28
 
 # 异步处理
-asyncio==3.4.3
 aiohttp==3.9.1
 
 # 配置与日志
@@ -24,10 +23,10 @@ structlog==23.2.0
 
 # 数据分析与可视化
 plotly==5.18.0
-matplotlib==3.8.2
-seaborn==0.13.0
-scipy==1.11.4
-statsmodels==0.14.1
+matplotlib>=3.7.0,<4.0.0
+seaborn>=0.12.0,<1.0.0
+# scipy>=1.10.0,<2.0.0  # 暂时注释，需要Fortran编译器
+# statsmodels>=0.13.0,<1.0.0  # 暂时注释，与Python 3.12兼容性问题
 
 # Web框架与界面
 streamlit==1.32.0
@@ -36,6 +35,14 @@ uvicorn==0.27.1
 
 # 数据处理与存储
 sqlalchemy==2.0.25
+psycopg2-binary==2.9.9
+alembic==1.13.1
+
+# 数据库连接池
+sqlalchemy[asyncio]==2.0.25
+
+# 加密和安全
+cryptography>=41.0.0
 
 # 日期时间处理
 python-dateutil==2.8.2

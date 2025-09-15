@@ -1,0 +1,41 @@
+[Unit]
+Description=OKX Trading System
+Documentation=https://github.com/your-repo/okx-trading-system
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=forking
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/okx-trading-system
+ExecStart=/opt/okx-trading-system/start_system.sh
+ExecStop=/opt/okx-trading-system/stop_system.sh
+ExecReload=/bin/kill -HUP $MAINPID
+PIDFile=/opt/okx-trading-system/.backend.pid
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=okx-trading
+
+# 环境变量
+Environment=NODE_ENV=production
+Environment=PYTHONPATH=/opt/okx-trading-system
+Environment=DATABASE_URL=postgresql://postgres:password@localhost:5432/trading_system
+
+# 安全设置
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/okx-trading-system/logs
+ReadWritePaths=/opt/okx-trading-system/.backend.pid
+ReadWritePaths=/opt/okx-trading-system/.frontend.pid
+
+# 资源限制
+LimitNOFILE=65536
+LimitNPROC=4096
+
+[Install]
+WantedBy=multi-user.target
