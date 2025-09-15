@@ -1,0 +1,118 @@
+# API和敏感配置文件
+.env
+.env.local
+.env.*
+.env.production
+.env.development
+config/secrets.json
+api_config.enc
+*.enc
+*.key
+*.pem
+*.cert
+
+# API密钥和配置文件
+api_config.enc
+config/secrets.json
+config/credentials.*
+
+# 日志文件
+logs/
+*.log
+
+# 运行时数据
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# 备份文件
+*.bak
+*.backup
+*.tmp
+
+# 编译文件
+__pycache__/
+*.py[cod]
+*.pyc
+*$py.class
+*.so
+.Python
+
+# 虚拟环境
+venv/
+env/
+ENV/
+
+# 编辑器文件
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 操作系统文件
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# 测试覆盖报告
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+
+# 打包文件
+*.egg
+*.egg-info/
+dist/
+build/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# 加密密钥文件
+*.key
+*.secret
+
+# 交易数据缓存
+cache/
+*.cache
+
+# 个人设置
+personal_settings.py
+local_config.py
+
+# 临时下载文件
+downloads/
+temp/
+
+# 特定于本项目的敏感文件
+test_api_connection.py
+
+# 确保这些常见的API相关文件被忽略
+secrets.ini
+credentials.ini
+config.ini
+
+# Python打包相关
+*.egg-info/
+*.dist-info/
+
+# 数据库迁移文件（如果有的话）
+migrations/
+
+# 大型数据文件
+*.csv
+*.json
+*.h5
+*.hdf5
+
+# 机器学习模型文件
+*.pkl
+*.joblib
+*.model
