@@ -107,59 +107,162 @@ class SignalFusionEngine:
             return None
         
         close = ohlc_data.close
+        high = ohlc_data.high
+        low = ohlc_data.low
+        volume = ohlc_data.volume
         
-        # 计算EMA交叉信号
+        # 计算多种趋势指标
         ema_12 = pd.Series(close).ewm(span=12).mean().values
         ema_26 = pd.Series(close).ewm(span=26).mean().values
+        ema_50 = pd.Series(close).ewm(span=50).mean().values
         
-        if len(ema_12) > 0 and len(ema_26) > 0:
-            # EMA金叉死叉信号
-            ema_signal = 1.0 if ema_12[-1] > ema_26[-1] else -1.0
+        # 计算MACD
+        macd_line = ema_12 - ema_26
+        signal_line = pd.Series(macd_line).ewm(span=9).mean().values
+        macd_histogram = macd_line - signal_line
+        
+        # 计算ADX (趋势强度)
+        adx = self._calculate_adx(high, low, close, 14)
+        
+        # 计算成交量加权平均价格 (VWAP)
+        vwap = self._calculate_vwap(high, low, close, volume)
+        
+        if len(ema_12) > 0 and len(ema_26) > 0 and len(ema_50) > 0:
+            # 多重EMA排列信号
+            ema_alignment = 0.0
+            if ema_12[-1] > ema_26[-1] > ema_50[-1]:  # 多头排列
+                ema_alignment = 1.0
+            elif ema_12[-1] < ema_26[-1] < ema_50[-1]:  # 空头排列
+                ema_alignment = -1.0
+            
+            # MACD信号
+            macd_signal = 0.0
+            if len(macd_histogram) > 1:
+                if macd_line[-1] > signal_line[-1] and macd_histogram[-1] > macd_histogram[-2]:
+                    macd_signal = 1.0
+                elif macd_line[-1] < signal_line[-1] and macd_histogram[-1] < macd_histogram[-2]:
+                    macd_signal = -1.0
+            
+            # 价格相对于VWAP的位置
+            vwap_signal = 0.0
+            if vwap is not None and len(vwap) > 0:
+                if close[-1] > vwap[-1]:
+                    vwap_signal = 1.0
+                else:
+                    vwap_signal = -1.0
+            
+            # 综合趋势信号
+            trend_signals = [ema_alignment, macd_signal, vwap_signal]
+            final_signal = np.mean([s for s in trend_signals if s != 0.0])
+            
+            # 计算置信度
+            confidence = 0.5  # 基础置信度
+            
+            # ADX增强置信度
+            if adx is not None and len(adx) > 0:
+                adx_strength = min(adx[-1] / 50.0, 1.0)  # ADX > 25表示强趋势
+                confidence *= (0.5 + adx_strength * 0.5)
+            
+            # 信号一致性增强置信度
+            signal_consistency = sum(1 for s in trend_signals if s != 0.0 and np.sign(s) == np.sign(final_signal))
+            consistency_bonus = signal_consistency / len([s for s in trend_signals if s != 0.0]) if any(trend_signals) else 0
+            confidence *= (0.7 + consistency_bonus * 0.3)
             
             # 趋势强度（基于价格与EMA的距离）
             trend_strength = abs(close[-1] - ema_26[-1]) / ema_26[-1]
-            confidence = min(trend_strength * 10, 1.0)  # 标准化到0-1
+            confidence *= min(trend_strength * 5 + 0.5, 1.0)
             
-            return SignalStrength(
-                value=ema_signal,
-                confidence=confidence,
-                timeframe=ohlc_data.timeframe,
-                strategy_type=StrategyType.TREND_FOLLOWING
-            )
+            if abs(final_signal) > 0.1:  # 只有明确信号才返回
+                return SignalStrength(
+                    value=final_signal,
+                    confidence=min(confidence, 1.0),
+                    timeframe=ohlc_data.timeframe,
+                    strategy_type=StrategyType.TREND_FOLLOWING
+                )
         
         return None
     
     def _generate_mean_reversion_signal(self, ohlc_data: OHLCVData, 
                                       market_regimes: Dict[str, MarketRegime]) -> Optional[SignalStrength]:
         """生成均值回归信号"""
-        if len(ohlc_data.close) < 20:
+        if len(ohlc_data.close) < 30:
             return None
         
         close = ohlc_data.close
+        high = ohlc_data.high
+        low = ohlc_data.low
         
-        # 计算RSI
+        # 计算多种均值回归指标
         rsi = self._calculate_rsi(close, 14)
+        stoch_k, stoch_d = self._calculate_stochastic(high, low, close, 14, 3)
+        bb_upper, bb_middle, bb_lower = self._calculate_bollinger_bands(close, 20, 2)
+        williams_r = self._calculate_williams_r(high, low, close, 14)
+        
         if rsi is None or len(rsi) == 0:
             return None
         
         current_rsi = rsi[-1]
+        signals = []
+        confidences = []
         
-        # RSI超买超卖信号
-        if current_rsi > 70:
-            signal_value = -1.0  # 超卖，做空信号
-            confidence = (current_rsi - 70) / 30  # 70-100映射到0-1
-        elif current_rsi < 30:
-            signal_value = 1.0   # 超买，做多信号
-            confidence = (30 - current_rsi) / 30  # 0-30映射到0-1
-        else:
+        # RSI信号
+        if current_rsi > 75:
+            signals.append(-1.0)
+            confidences.append((current_rsi - 75) / 25)
+        elif current_rsi < 25:
+            signals.append(1.0)
+            confidences.append((25 - current_rsi) / 25)
+        
+        # 随机指标信号
+        if stoch_k is not None and len(stoch_k) > 0:
+            current_stoch_k = stoch_k[-1]
+            if current_stoch_k > 80:
+                signals.append(-1.0)
+                confidences.append((current_stoch_k - 80) / 20)
+            elif current_stoch_k < 20:
+                signals.append(1.0)
+                confidences.append((20 - current_stoch_k) / 20)
+        
+        # 布林带信号
+        if bb_upper is not None and len(bb_upper) > 0:
+            if close[-1] > bb_upper[-1]:  # 价格突破上轨
+                signals.append(-1.0)
+                confidences.append(min((close[-1] - bb_upper[-1]) / bb_upper[-1], 1.0))
+            elif close[-1] < bb_lower[-1]:  # 价格突破下轨
+                signals.append(1.0)
+                confidences.append(min((bb_lower[-1] - close[-1]) / bb_lower[-1], 1.0))
+        
+        # 威廉指标信号
+        if williams_r is not None and len(williams_r) > 0:
+            current_wr = williams_r[-1]
+            if current_wr > -20:  # 超买
+                signals.append(-1.0)
+                confidences.append((current_wr + 20) / 20)
+            elif current_wr < -80:  # 超卖
+                signals.append(1.0)
+                confidences.append((-80 - current_wr) / 20)
+        
+        if not signals:
             return None
         
-        return SignalStrength(
-            value=signal_value,
-            confidence=confidence,
-            timeframe=ohlc_data.timeframe,
-            strategy_type=StrategyType.MEAN_REVERSION
-        )
+        # 计算综合信号
+        weighted_signal = np.average(signals, weights=confidences)
+        avg_confidence = np.mean(confidences)
+        
+        # 信号一致性检查
+        signal_consistency = sum(1 for s in signals if np.sign(s) == np.sign(weighted_signal)) / len(signals)
+        final_confidence = avg_confidence * signal_consistency
+        
+        # 只有在明确的超买超卖情况下才发出信号
+        if abs(weighted_signal) > 0.3 and final_confidence > 0.4:
+            return SignalStrength(
+                value=weighted_signal,
+                confidence=min(final_confidence, 1.0),
+                timeframe=ohlc_data.timeframe,
+                strategy_type=StrategyType.MEAN_REVERSION
+            )
+        
+        return None
     
     def _generate_breakout_signal(self, ohlc_data: OHLCVData, 
                                market_regimes: Dict[str, MarketRegime]) -> Optional[SignalStrength]:
@@ -280,6 +383,102 @@ class SignalFusionEngine:
             return 100 - (100 / (1 + rs)).values
         except Exception as e:
             logger.error(f"RSI calculation error: {e}")
+            return None
+    
+    def _calculate_adx(self, high: np.ndarray, low: np.ndarray, close: np.ndarray, period: int) -> Optional[np.ndarray]:
+        """计算ADX (平均趋向指数)"""
+        try:
+            high_s = pd.Series(high)
+            low_s = pd.Series(low)
+            close_s = pd.Series(close)
+            
+            # 计算真实波幅 (TR)
+            tr1 = high_s - low_s
+            tr2 = abs(high_s - close_s.shift(1))
+            tr3 = abs(low_s - close_s.shift(1))
+            tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+            
+            # 计算方向性移动 (DM)
+            plus_dm = high_s.diff()
+            minus_dm = low_s.diff()
+            
+            plus_dm[plus_dm < 0] = 0
+            minus_dm[minus_dm > 0] = 0
+            minus_dm = abs(minus_dm)
+            
+            # 计算平滑的TR和DM
+            atr = tr.rolling(window=period).mean()
+            plus_di = 100 * (plus_dm.rolling(window=period).mean() / atr)
+            minus_di = 100 * (minus_dm.rolling(window=period).mean() / atr)
+            
+            # 计算ADX
+            dx = 100 * abs(plus_di - minus_di) / (plus_di + minus_di)
+            adx = dx.rolling(window=period).mean()
+            
+            return adx.values
+        except Exception as e:
+            logger.error(f"ADX calculation error: {e}")
+            return None
+    
+    def _calculate_vwap(self, high: np.ndarray, low: np.ndarray, close: np.ndarray, volume: np.ndarray) -> Optional[np.ndarray]:
+        """计算成交量加权平均价格 (VWAP)"""
+        try:
+            typical_price = (high + low + close) / 3
+            vwap = np.cumsum(typical_price * volume) / np.cumsum(volume)
+            return vwap
+        except Exception as e:
+            logger.error(f"VWAP calculation error: {e}")
+            return None
+    
+    def _calculate_stochastic(self, high: np.ndarray, low: np.ndarray, close: np.ndarray, 
+                            k_period: int, d_period: int) -> tuple:
+        """计算随机指标 (Stochastic)"""
+        try:
+            high_s = pd.Series(high)
+            low_s = pd.Series(low)
+            close_s = pd.Series(close)
+            
+            lowest_low = low_s.rolling(window=k_period).min()
+            highest_high = high_s.rolling(window=k_period).max()
+            
+            k_percent = 100 * ((close_s - lowest_low) / (highest_high - lowest_low))
+            d_percent = k_percent.rolling(window=d_period).mean()
+            
+            return k_percent.values, d_percent.values
+        except Exception as e:
+            logger.error(f"Stochastic calculation error: {e}")
+            return None, None
+    
+    def _calculate_bollinger_bands(self, data: np.ndarray, period: int, std_dev: float) -> tuple:
+        """计算布林带"""
+        try:
+            close_s = pd.Series(data)
+            sma = close_s.rolling(window=period).mean()
+            std = close_s.rolling(window=period).std()
+            
+            upper_band = sma + (std * std_dev)
+            lower_band = sma - (std * std_dev)
+            
+            return upper_band.values, sma.values, lower_band.values
+        except Exception as e:
+            logger.error(f"Bollinger Bands calculation error: {e}")
+            return None, None, None
+    
+    def _calculate_williams_r(self, high: np.ndarray, low: np.ndarray, close: np.ndarray, period: int) -> Optional[np.ndarray]:
+        """计算威廉指标 (Williams %R)"""
+        try:
+            high_s = pd.Series(high)
+            low_s = pd.Series(low)
+            close_s = pd.Series(close)
+            
+            highest_high = high_s.rolling(window=period).max()
+            lowest_low = low_s.rolling(window=period).min()
+            
+            williams_r = -100 * ((highest_high - close_s) / (highest_high - lowest_low))
+            
+            return williams_r.values
+        except Exception as e:
+            logger.error(f"Williams %R calculation error: {e}")
             return None
     
     def get_signal_description(self, signal: TradingSignal) -> str:

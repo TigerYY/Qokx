@@ -19,16 +19,32 @@ from dotenv import load_dotenv
 from src.utils.okx_rest_client import OKXRESTClient
 from src.utils.okx_public_client import get_public_client
 
-# 加载环境变量
-load_dotenv()
-
-# 设置页面配置
+# 设置页面配置 - 必须在所有Streamlit命令之前
 st.set_page_config(
     page_title="okx自动交易系统",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# 导入实时交易组件
+try:
+    from src.trading.realtime_trading_engine import RealtimeTradingEngine
+    from src.trading.strategy_execution_bridge import StrategyExecutionBridge
+    from src.risk.realtime_risk_manager import RealtimeRiskManager, RiskEvent, RiskEventType
+    from src.strategies.signal_fusion_engine import SignalFusionEngine
+    from src.execution.order_execution_engine import OrderExecutionEngine
+    from src.utils.position_manager import PositionManager
+    from src.data.realtime_data_processor import RealtimeDataProcessor
+    from src.config.settings import TradingConfig
+    REALTIME_TRADING_AVAILABLE = True
+except ImportError as e:
+    # 延迟显示警告，直到页面配置完成
+    REALTIME_TRADING_AVAILABLE = False
+    IMPORT_ERROR_MESSAGE = f"实时交易组件导入失败: {e}，将使用模拟模式"
+
+# 加载环境变量
+load_dotenv()
 
 # 自定义CSS样式
 st.markdown("""
@@ -64,6 +80,12 @@ class TradingDashboard:
         self.initialize_session_state()
         self.okx_client = None
         self.initialize_okx_client()
+        
+        # 初始化实时交易组件
+        self.realtime_engine = None
+        self.strategy_bridge = None
+        self.risk_manager = None
+        self.initialize_realtime_components()
     
     def initialize_okx_client(self):
         """初始化OKX客户端"""
@@ -92,6 +114,50 @@ class TradingDashboard:
             st.error(f"❌ OKX客户端初始化失败: {e}")
             st.session_state.api_connected = False
     
+    def initialize_realtime_components(self):
+        """初始化实时交易组件"""
+        if not REALTIME_TRADING_AVAILABLE:
+            return
+        
+        try:
+            # 创建交易配置
+            config = TradingConfig(
+                api_key=os.getenv('OKX_API_KEY', ''),
+                secret_key=os.getenv('OKX_SECRET_KEY', ''),
+                passphrase=os.getenv('OKX_PASSPHRASE', ''),
+                testnet=os.getenv('OKX_TESTNET', 'true').lower() == 'true',
+                max_position_size=st.session_state.risk_limits['max_position_size'],
+                max_daily_loss=st.session_state.risk_limits['max_daily_loss'],
+                max_drawdown=st.session_state.risk_limits['max_drawdown'],
+                stop_loss_pct=st.session_state.risk_limits['stop_loss'],
+                take_profit_pct=st.session_state.risk_limits['take_profit']
+            )
+            
+            # 初始化核心组件
+            if st.session_state.api_connected and self.okx_client:
+                # 使用真实API
+                self.realtime_engine = RealtimeTradingEngine(
+                    okx_client=self.okx_client,
+                    config=config
+                )
+                
+                # 初始化策略执行桥接器
+                self.strategy_bridge = StrategyExecutionBridge(
+                    strategy_engine=None,  # 将在启动时初始化
+                    execution_engine=None,  # 将在启动时初始化
+                    risk_manager=None,     # 将在启动时初始化
+                    config=config
+                )
+                
+                st.session_state.realtime_trading_enabled = True
+                st.success("✅ 实时交易组件初始化成功")
+            else:
+                st.info("ℹ️ 实时交易组件已准备就绪，等待API连接")
+                
+        except Exception as e:
+            st.error(f"❌ 实时交易组件初始化失败: {e}")
+            st.session_state.realtime_trading_enabled = False
+    
     def initialize_session_state(self):
         """初始化会话状态"""
         if 'initialized' not in st.session_state:
@@ -106,6 +172,24 @@ class TradingDashboard:
             st.session_state.trading_status = "stopped"
             st.session_state.market_data = self.get_market_data('1H', 100)
             st.session_state.current_timeframe = '1H'
+            
+            # 实时交易状态
+            st.session_state.realtime_trading_enabled = False
+            st.session_state.realtime_trading_active = False
+            st.session_state.strategy_running = False
+            st.session_state.risk_monitoring = False
+            st.session_state.risk_events = []
+            st.session_state.portfolio_metrics = {}
+            st.session_state.trading_statistics = {}
+            st.session_state.selected_strategy = "信号融合策略"
+            st.session_state.trading_active = False
+            st.session_state.risk_limits = {
+                'max_position_size': 0.2,
+                'max_daily_loss': 0.05,
+                'max_drawdown': 0.15,
+                'stop_loss': 0.02,
+                'take_profit': 0.04
+            }
     
     def get_market_data(self, timeframe='1H', limit=100) -> Dict[str, pd.DataFrame]:
         """获取市场数据 - 优先使用公共API，然后私有API，最后使用模拟数据"""
@@ -244,25 +328,83 @@ class TradingDashboard:
             
             # 交易控制
             st.markdown("### ⚙️ 交易控制")
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("▶️ 启动交易", use_container_width=True):
-                    self.start_trading()
-            with col2:
-                if st.button("⏹️ 停止交易", use_container_width=True):
-                    self.stop_trading()
+            
+            # 实时交易控制
+            if REALTIME_TRADING_AVAILABLE and st.session_state.realtime_trading_enabled:
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("🚀 启动实时交易", use_container_width=True, type="primary"):
+                        asyncio.run(self.start_realtime_trading())
+                with col2:
+                    if st.button("⏹️ 停止实时交易", use_container_width=True):
+                        asyncio.run(self.stop_realtime_trading())
+                
+                # 策略控制
+                st.markdown("**策略控制**")
+                col3, col4 = st.columns(2)
+                with col3:
+                    if st.button("📊 启动策略", use_container_width=True, disabled=not st.session_state.strategy_running):
+                        self.start_strategy_monitoring()
+                with col4:
+                    if st.button("🛡️ 启动风控", use_container_width=True, disabled=not st.session_state.risk_monitoring):
+                        self.start_risk_monitoring()
+            else:
+                # 模拟交易控制
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("▶️ 启动模拟交易", use_container_width=True):
+                        self.start_trading()
+                with col2:
+                    if st.button("⏹️ 停止模拟交易", use_container_width=True):
+                        self.stop_trading()
             
             # 策略配置
             st.markdown("### 🎯 策略配置")
-            st.selectbox("交易对", ["BTC-USDT", "ETH-USDT", "SOL-USDT"], index=0)
-            st.slider("风险比例", 0.1, 5.0, 1.0, 0.1)
-            st.slider("最大仓位", 0.1, 0.5, 0.2, 0.05)
+            selected_symbol = st.selectbox("交易对", ["BTC-USDT", "ETH-USDT", "SOL-USDT"], index=0, key="trading_symbol")
+            
+            if REALTIME_TRADING_AVAILABLE:
+                strategy_type = st.selectbox(
+                    "策略类型", 
+                    ["信号融合策略", "市场状态检测策略", "网格交易策略", "DCA定投策略"], 
+                    index=0,
+                    key="strategy_type"
+                )
+                st.session_state.selected_strategy = strategy_type
+            
+            risk_ratio = st.slider("风险比例", 0.1, 5.0, 1.0, 0.1, key="risk_ratio")
+            max_position = st.slider("最大仓位", 0.1, 0.5, st.session_state.risk_limits['max_position_size'], 0.05, key="max_position")
+            st.session_state.risk_limits['max_position_size'] = max_position
             
             # 风控设置
             st.markdown("### 🛡️ 风控设置")
-            st.slider("止损比例", 0.5, 10.0, 2.0, 0.5)
-            st.slider("止盈比例", 1.0, 20.0, 4.0, 0.5)
-            st.number_input("最大回撤", 5, 30, 15)
+            stop_loss = st.slider("止损比例(%)", 0.5, 10.0, st.session_state.risk_limits['stop_loss']*100, 0.5, key="stop_loss") / 100
+            take_profit = st.slider("止盈比例(%)", 1.0, 20.0, st.session_state.risk_limits['take_profit']*100, 0.5, key="take_profit") / 100
+            max_drawdown = st.slider("最大回撤(%)", 5.0, 30.0, st.session_state.risk_limits['max_drawdown']*100, 1.0, key="max_drawdown") / 100
+            max_daily_loss = st.slider("日最大损失(%)", 1.0, 10.0, st.session_state.risk_limits['max_daily_loss']*100, 0.5, key="max_daily_loss") / 100
+            
+            # 更新风险限制
+            st.session_state.risk_limits.update({
+                'stop_loss': stop_loss,
+                'take_profit': take_profit,
+                'max_drawdown': max_drawdown,
+                'max_daily_loss': max_daily_loss
+            })
+            
+            # 实时状态显示
+            if REALTIME_TRADING_AVAILABLE:
+                st.markdown("### 📊 实时状态")
+                col1, col2 = st.columns(2)
+                with col1:
+                    strategy_status = "🟢 运行中" if st.session_state.strategy_running else "🔴 已停止"
+                    st.markdown(f"**策略状态:** {strategy_status}")
+                with col2:
+                    risk_status = "🟢 监控中" if st.session_state.risk_monitoring else "🔴 已停止"
+                    st.markdown(f"**风控状态:** {risk_status}")
+                
+                # 风险事件计数
+                active_events = len([e for e in st.session_state.risk_events if not e.get('resolved', False)])
+                if active_events > 0:
+                    st.warning(f"⚠️ 活跃风险事件: {active_events} 个")
     
     def render_header_metrics(self):
         """渲染头部指标卡片"""
@@ -486,10 +628,34 @@ class TradingDashboard:
             )
             
             if st.button("🚀 启动策略", use_container_width=True):
-                st.warning("⚠️ 策略功能正在开发中，敬请期待！")
+                if REALTIME_TRADING_AVAILABLE:
+                    try:
+                        # 启动选定的策略
+                        if self._start_selected_strategy(selected_strategy):
+                            st.success(f"✅ {selected_strategy} 已成功启动！")
+                            st.session_state.strategy_running = True
+                            st.session_state.selected_strategy = selected_strategy
+                        else:
+                            st.error("❌ 策略启动失败，请检查配置")
+                    except Exception as e:
+                        st.error(f"❌ 策略启动异常: {str(e)}")
+                        logger.error(f"策略启动异常: {e}")
+                else:
+                    st.warning("⚠️ 实时交易组件不可用，请检查依赖安装")
             
             if st.button("📊 回测策略", use_container_width=True):
-                st.info("ℹ️ 回测功能即将上线")
+                if REALTIME_TRADING_AVAILABLE:
+                    try:
+                        # 启动回测
+                        if self._run_strategy_backtest(selected_strategy):
+                            st.success(f"✅ {selected_strategy} 回测完成！")
+                        else:
+                            st.error("❌ 回测失败，请检查配置")
+                    except Exception as e:
+                        st.error(f"❌ 回测异常: {str(e)}")
+                        logger.error(f"回测异常: {e}")
+                else:
+                    st.warning("⚠️ 回测组件不可用，请检查依赖安装")
         
         st.markdown("---")
         
@@ -647,23 +813,267 @@ class TradingDashboard:
         return np.std(returns)
     
     def start_trading(self):
-        """启动交易"""
-        st.session_state.trading_status = "running"
-        st.success("交易系统已启动")
-        
-        # 模拟交易线程
-        threading.Thread(target=self.simulate_trading, daemon=True).start()
+        """启动模拟交易"""
+        if not st.session_state.get('trading_active', False):
+            st.session_state.trading_active = True
+            st.session_state.trading_status = "running"
+            threading.Thread(target=self.simulate_trading, daemon=True).start()
+            st.success("✅ 模拟交易已启动")
+        else:
+            st.warning("⚠️ 模拟交易已在运行中")
     
     def stop_trading(self):
-        """停止交易"""
-        st.session_state.trading_status = "stopped"
-        st.warning("交易系统已停止")
+        """停止模拟交易"""
+        if st.session_state.get('trading_active', False):
+            st.session_state.trading_active = False
+            st.session_state.trading_status = "stopped"
+            st.success("✅ 模拟交易已停止")
+        else:
+            st.warning("⚠️ 模拟交易未在运行")
+    
+    async def start_realtime_trading(self):
+        """启动实时交易"""
+        if not REALTIME_TRADING_AVAILABLE:
+            st.error("❌ 实时交易组件不可用")
+            return
+        
+        if st.session_state.get('realtime_trading_active', False):
+            st.warning("⚠️ 实时交易已在运行中")
+            return
+        
+        try:
+            # 初始化实时交易引擎
+            if hasattr(self, 'realtime_engine') and self.realtime_engine:
+                await self.realtime_engine.start()
+                st.session_state.realtime_trading_active = True
+                st.session_state.strategy_running = True
+                st.session_state.risk_monitoring = True
+                st.success("🚀 实时交易已启动")
+                
+                # 启动策略执行桥接器
+                if hasattr(self, 'strategy_bridge') and self.strategy_bridge:
+                    await self.strategy_bridge.start()
+                    st.success("📊 策略执行桥接器已启动")
+            else:
+                st.error("❌ 实时交易引擎未初始化")
+                
+        except Exception as e:
+            st.error(f"❌ 启动实时交易失败: {e}")
+            st.session_state.realtime_trading_active = False
+    
+    async def stop_realtime_trading(self):
+        """停止实时交易"""
+        if not st.session_state.get('realtime_trading_active', False):
+            st.warning("⚠️ 实时交易未在运行")
+            return
+        
+        try:
+            # 停止策略执行桥接器
+            if hasattr(self, 'strategy_bridge') and self.strategy_bridge:
+                await self.strategy_bridge.stop()
+                st.info("📊 策略执行桥接器已停止")
+            
+            # 停止实时交易引擎
+            if hasattr(self, 'realtime_engine') and self.realtime_engine:
+                await self.realtime_engine.stop()
+                st.session_state.realtime_trading_active = False
+                st.session_state.strategy_running = False
+                st.session_state.risk_monitoring = False
+                st.success("⏹️ 实时交易已停止")
+            
+        except Exception as e:
+            st.error(f"❌ 停止实时交易失败: {e}")
+    
+    def _start_selected_strategy(self, strategy_name: str) -> bool:
+        """启动选定的策略"""
+        try:
+            if not REALTIME_TRADING_AVAILABLE:
+                return False
+            
+            # 获取当前配置
+            symbol = st.session_state.get('trading_symbol', 'BTC-USDT')
+            risk_ratio = st.session_state.get('risk_ratio', 1.0)
+            max_position = st.session_state.get('max_position', 0.3)
+            
+            # 初始化交易引擎（如果还没有初始化）
+            if not hasattr(self, 'trading_engine') or self.trading_engine is None:
+                from src.trading.realtime_trading_engine import initialize_trading_engine
+                from src.config.settings import TradingConfig
+                
+                # 创建交易配置
+                config = TradingConfig(
+                    commission_rate=0.001,
+                    slippage=0.0005,
+                    max_position_size=max_position,
+                    risk_multiplier=risk_ratio
+                )
+                
+                # 初始化交易引擎
+                self.trading_engine = initialize_trading_engine(
+                    config=config,
+                    okx_client=self.okx_client,
+                    symbol=symbol
+                )
+            
+            # 启动交易引擎
+            if self.trading_engine:
+                # 在后台启动交易
+                import asyncio
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                
+                # 启动交易引擎
+                success = loop.run_until_complete(self.trading_engine.start_trading())
+                
+                if success:
+                    st.session_state.strategy_name = strategy_name
+                    st.session_state.strategy_symbol = symbol
+                    return True
+            
+            return False
+            
+        except Exception as e:
+             logger.error(f"启动策略失败: {e}")
+             return False
+    
+    def _run_strategy_backtest(self, strategy_name: str) -> bool:
+        """运行策略回测"""
+        try:
+            if not REALTIME_TRADING_AVAILABLE:
+                return False
+            
+            # 获取当前配置
+            symbol = st.session_state.get('trading_symbol', 'BTC-USDT')
+            risk_ratio = st.session_state.get('risk_ratio', 1.0)
+            max_position = st.session_state.get('max_position', 0.3)
+            
+            # 显示回测进度
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            status_text.text('🔄 正在准备回测数据...')
+            progress_bar.progress(20)
+            
+            # 导入回测引擎
+            from src.backtest.backtest_engine import BacktestEngine
+            from src.config.settings import TradingConfig
+            
+            # 创建回测配置
+            config = TradingConfig(
+                commission_rate=0.001,
+                slippage=0.0005,
+                max_position_size=max_position,
+                risk_multiplier=risk_ratio
+            )
+            
+            status_text.text('📊 正在初始化回测引擎...')
+            progress_bar.progress(40)
+            
+            # 初始化回测引擎
+            backtest_engine = BacktestEngine(config)
+            
+            status_text.text('🚀 正在运行回测...')
+            progress_bar.progress(60)
+            
+            # 运行回测（使用最近30天的数据）
+            from datetime import datetime, timedelta
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=30)
+            
+            # 运行回测
+            results = backtest_engine.run_backtest(
+                symbol=symbol,
+                start_date=start_date,
+                end_date=end_date,
+                strategy_name=strategy_name
+            )
+            
+            status_text.text('📈 正在生成回测报告...')
+            progress_bar.progress(80)
+            
+            # 显示回测结果
+            if results:
+                st.session_state.backtest_results = results
+                self._display_backtest_results(results)
+                
+                progress_bar.progress(100)
+                status_text.text('✅ 回测完成！')
+                return True
+            else:
+                status_text.text('❌ 回测失败')
+                return False
+                
+        except Exception as e:
+            logger.error(f"回测失败: {e}")
+            st.error(f"回测过程中出现错误: {str(e)}")
+            return False
+    
+    def _display_backtest_results(self, results: dict):
+        """显示回测结果"""
+        st.markdown("### 📊 回测结果")
+        
+        # 创建指标展示
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            total_return = results.get('total_return', 0)
+            st.metric("总收益率", f"{total_return:.2%}")
+        
+        with col2:
+            sharpe_ratio = results.get('sharpe_ratio', 0)
+            st.metric("夏普比率", f"{sharpe_ratio:.2f}")
+        
+        with col3:
+            max_drawdown = results.get('max_drawdown', 0)
+            st.metric("最大回撤", f"{max_drawdown:.2%}")
+        
+        with col4:
+            win_rate = results.get('win_rate', 0)
+            st.metric("胜率", f"{win_rate:.2%}")
+        
+        # 显示权益曲线
+        if 'equity_curve' in results:
+            equity_data = results['equity_curve']
+            if equity_data:
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(
+                    x=list(range(len(equity_data))),
+                    y=equity_data,
+                    mode='lines',
+                    name='权益曲线',
+                    line=dict(color='#1f77b4', width=2)
+                ))
+                
+                fig.update_layout(
+                    title='回测权益曲线',
+                    xaxis_title='时间',
+                    yaxis_title='权益',
+                    height=400
+                )
+                
+                st.plotly_chart(fig, use_container_width=True)
+    
+    def start_strategy_monitoring(self):
+        """启动策略监控"""
+        if not st.session_state.strategy_running:
+            st.session_state.strategy_running = True
+            st.success("📊 策略监控已启动")
+        else:
+            st.warning("⚠️ 策略监控已在运行中")
+    
+    def start_risk_monitoring(self):
+        """启动风险监控"""
+        if not st.session_state.risk_monitoring:
+            st.session_state.risk_monitoring = True
+            st.success("🛡️ 风险监控已启动")
+        else:
+            st.warning("⚠️ 风险监控已在运行中")
     
     def simulate_trading(self):
         """模拟交易逻辑"""
         import time
         
-        while st.session_state.trading_status == "running":
+        while st.session_state.get('trading_active', False):
             try:
                 # 更新市场数据
                 st.session_state.market_data = self.get_market_data()
@@ -719,6 +1129,10 @@ class TradingDashboard:
         
         # 主内容区域
         st.markdown("<div class='main-header'>🚀 okx自动交易系统仪表板</div>", unsafe_allow_html=True)
+        
+        # 显示延迟的导入错误消息
+        if not REALTIME_TRADING_AVAILABLE and 'IMPORT_ERROR_MESSAGE' in globals():
+            st.warning(IMPORT_ERROR_MESSAGE)
         
         self.render_header_metrics()
         
