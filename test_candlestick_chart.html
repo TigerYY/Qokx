@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>K线图测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #1a1a1a;
+            color: white;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .chart-container {
+            background: rgba(26, 26, 26, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .timeframe-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .timeframe-btn {
+            padding: 8px 16px;
+            border: 1px solid #333;
+            background: #333;
+            color: white;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .timeframe-btn:hover {
+            background: #555;
+        }
+        .timeframe-btn.active {
+            background: #1976d2;
+            border-color: #1976d2;
+        }
+        .price-info {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .current-price {
+            font-size: 24px;
+            font-weight: bold;
+            color: #00D4AA;
+        }
+        .price-change {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .price-change.positive {
+            background: rgba(0, 212, 170, 0.2);
+            color: #00D4AA;
+        }
+        .price-change.negative {
+            background: rgba(255, 107, 107, 0.2);
+            color: #FF6B6B;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>BTC-USDT K线图测试</h1>
+        
+        <div class="chart-container">
+            <div class="price-info">
+                <div class="current-price">$116,743.6</div>
+                <div class="price-change positive">+2.34%</div>
+                <div>24h成交量: 1,234.56 BTC</div>
+            </div>
+            
+            <div class="timeframe-buttons">
+                <button class="timeframe-btn" onclick="changeTimeframe('1H')">1H</button>
+                <button class="timeframe-btn active" onclick="changeTimeframe('4H')">4H</button>
+                <button class="timeframe-btn" onclick="changeTimeframe('1D')">1D</button>
+            </div>
+            
+            <div id="chart-placeholder" style="height: 400px; background: #222; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #666;">
+                <div>
+                    <h3>K线图组件</h3>
+                    <p>这里将显示标准的K线图，包含：</p>
+                    <ul style="text-align: left;">
+                        <li>开盘价、最高价、最低价、收盘价</li>
+                        <li>成交量柱状图</li>
+                        <li>时间框架切换（1H/4H/1D）</li>
+                        <li>实时价格更新</li>
+                    </ul>
+                    <p style="margin-top: 20px;">
+                        <strong>当前时间框架：</strong> <span id="current-timeframe">4H</span>
+                    </p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="chart-container">
+            <h3>K线图特性说明</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
+                <div>
+                    <h4>📊 价格信息</h4>
+                    <ul>
+                        <li><strong>开盘价 (Open)</strong>: 时间段开始时的价格</li>
+                        <li><strong>最高价 (High)</strong>: 时间段内的最高价格</li>
+                        <li><strong>最低价 (Low)</strong>: 时间段内的最低价格</li>
+                        <li><strong>收盘价 (Close)</strong>: 时间段结束时的价格</li>
+                    </ul>
+                </div>
+                <div>
+                    <h4>📈 视觉表示</h4>
+                    <ul>
+                        <li><strong>绿色K线</strong>: 收盘价 > 开盘价（上涨）</li>
+                        <li><strong>红色K线</strong>: 收盘价 < 开盘价（下跌）</li>
+                        <li><strong>上影线</strong>: 最高价到实体顶部的线</li>
+                        <li><strong>下影线</strong>: 最低价到实体底部的线</li>
+                    </ul>
+                </div>
+                <div>
+                    <h4>📊 成交量</h4>
+                    <ul>
+                        <li><strong>柱状图</strong>: 显示每个时间段的成交量</li>
+                        <li><strong>颜色渐变</strong>: 绿色渐变表示成交量</li>
+                        <li><strong>单位显示</strong>: 自动转换为K/M单位</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function changeTimeframe(timeframe) {
+            // 更新按钮状态
+            document.querySelectorAll('.timeframe-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            // 更新当前时间框架显示
+            document.getElementById('current-timeframe').textContent = timeframe;
+            
+            // 这里可以添加实际的API调用逻辑
+            console.log('切换到时间框架:', timeframe);
+        }
+        
+        // 模拟实时价格更新
+        setInterval(() => {
+            const priceElement = document.querySelector('.current-price');
+            const currentPrice = parseFloat(priceElement.textContent.replace('$', '').replace(',', ''));
+            const change = (Math.random() - 0.5) * 1000; // 随机变化
+            const newPrice = currentPrice + change;
+            priceElement.textContent = '$' + newPrice.toLocaleString();
+        }, 5000);
+    </script>
+</body>
+</html>

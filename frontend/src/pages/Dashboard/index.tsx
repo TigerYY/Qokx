@@ -19,6 +19,7 @@ import {
 
 import MetricCard from '@/components/UI/MetricCard';
 import PriceChart from '@/components/Charts/PriceChart';
+import CandlestickChart from '@/components/Charts/CandlestickChart';
 import PerformanceChart from '@/components/Charts/PerformanceChart';
 import RecentTrades from '@/components/Trading/RecentTrades';
 import SystemStatus from '@/components/System/SystemStatus';
@@ -30,6 +31,15 @@ import { api } from '@/services/api';
 const Dashboard: React.FC = () => {
   const [refreshKey, setRefreshKey] = useState(0);
   const [priceData, setPriceData] = useState<Array<{time: string; price: number}>>([]);
+  const [candlestickData, setCandlestickData] = useState<Array<{
+    time: string;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume: number;
+    timestamp: number;
+  }>>([]);
   const [tickerData, setTickerData] = useState<any>(null);
   const [isLoadingPrice, setIsLoadingPrice] = useState(false);
   const [selectedTimeframe, setSelectedTimeframe] = useState('1H');
@@ -55,7 +65,20 @@ const Dashboard: React.FC = () => {
         }));
         
         setPriceData(formattedData);
+        
+        // 设置K线数据
+        const candlestickFormattedData = response.data.data.map((candle: any) => ({
+          time: candle.time,
+          open: candle.open,
+          high: candle.high,
+          low: candle.low,
+          close: candle.close,
+          volume: candle.volume,
+          timestamp: candle.timestamp
+        }));
+        setCandlestickData(candlestickFormattedData);
         console.log('价格图表数据设置成功:', formattedData);
+        console.log('K线数据设置成功:', candlestickFormattedData);
       } else {
         console.error('价格图表API返回失败:', response.data.message);
       }
@@ -358,7 +381,7 @@ const Dashboard: React.FC = () => {
                   />
                 </Box>
               </Box>
-              <PriceChart data={displayPriceData} />
+              <CandlestickChart data={candlestickData} height={400} showVolume={true} />
             </CardContent>
           </Card>
         </Grid>
