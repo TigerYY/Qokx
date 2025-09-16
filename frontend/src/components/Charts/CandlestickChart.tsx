@@ -7,12 +7,7 @@ import {
   Tooltip,
   ResponsiveContainer,
   Bar,
-  BarChart,
   Line,
-  LineChart,
-  Area,
-  AreaChart,
-  Cell,
 } from 'recharts';
 
 interface CandlestickData {
@@ -64,143 +59,7 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
   const volumes = data.map(d => d.volume);
   const maxVolume = Math.max(...volumes);
 
-  // 自定义K线渲染
-  const CustomCandlestick = (props: any) => {
-    const { payload, x, y, width, height } = props;
-    if (!payload) return null;
-
-    const { open, high, low, close } = payload;
-    const isGreen = close >= open;
-    const color = isGreen ? '#00D4AA' : '#FF6B6B';
-    
-    // 计算K线位置
-    const bodyHeight = Math.abs(close - open) * (height / (maxPrice - minPrice + padding * 2));
-    const bodyY = y + (maxPrice - Math.max(open, close)) * (height / (maxPrice - minPrice + padding * 2));
-    const wickTop = y + (maxPrice - high) * (height / (maxPrice - minPrice + padding * 2));
-    const wickBottom = y + (maxPrice - low) * (height / (maxPrice - minPrice + padding * 2));
-    const centerX = x + width / 2;
-
-    return (
-      <g>
-        {/* 上影线 */}
-        <line
-          x1={centerX}
-          y1={wickTop}
-          x2={centerX}
-          y2={Math.min(bodyY, bodyY + bodyHeight)}
-          stroke={color}
-          strokeWidth={1}
-        />
-        {/* 下影线 */}
-        <line
-          x1={centerX}
-          y1={Math.max(bodyY, bodyY + bodyHeight)}
-          x2={centerX}
-          y2={wickBottom}
-          stroke={color}
-          strokeWidth={1}
-        />
-        {/* K线实体 */}
-        <rect
-          x={x + width * 0.1}
-          y={bodyY}
-          width={width * 0.8}
-          height={Math.max(bodyHeight, 1)}
-          fill={isGreen ? color : 'transparent'}
-          stroke={color}
-          strokeWidth={1}
-        />
-        {/* 空心K线（下跌时） */}
-        {!isGreen && (
-          <rect
-            x={x + width * 0.1}
-            y={bodyY}
-            width={width * 0.8}
-            height={Math.max(bodyHeight, 1)}
-            fill="transparent"
-            stroke={color}
-            strokeWidth={1}
-          />
-        )}
-      </g>
-    );
-  };
-
-  if (showVolume) {
-    return (
-      <div style={{ width: '100%', height: height }}>
-        {/* 价格K线图 */}
-        <div style={{ height: height * 0.7 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.1)" />
-              <XAxis 
-                dataKey="time" 
-                stroke="#B0B0B0"
-                fontSize={12}
-                tickFormatter={formatTime}
-              />
-              <YAxis 
-                stroke="#B0B0B0"
-                fontSize={12}
-                tickFormatter={formatPrice}
-                domain={[minPrice - padding, maxPrice + padding]}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'rgba(26, 26, 26, 0.95)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
-                  borderRadius: '8px',
-                  color: '#FFFFFF',
-                }}
-                formatter={(value: number, name: string) => {
-                  if (name === 'close') {
-                    return [formatPrice(value), '收盘价'];
-                  }
-                  return [formatPrice(value), name];
-                }}
-                labelFormatter={(time: string) => `时间: ${time}`}
-              />
-              {/* 使用自定义K线渲染 */}
-              <Bar
-                dataKey="close"
-                shape={<CustomCandlestick />}
-                fill="transparent"
-              />
-            </ComposedChart>
-          </ResponsiveContainer>
-        </div>
-        
-        {/* 成交量图 */}
-        <div style={{ height: height * 0.3 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.1)" />
-              <XAxis 
-                dataKey="time" 
-                stroke="#B0B0B0"
-                fontSize={10}
-                tickFormatter={formatTime}
-              />
-              <YAxis 
-                stroke="#B0B0B0"
-                fontSize={10}
-                tickFormatter={formatVolume}
-                domain={[0, maxVolume * 1.1]}
-              />
-              <Bar
-                dataKey="volume"
-                fill="#00D4AA"
-                fillOpacity={0.6}
-              />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-    );
-  }
-
-  // 仅显示K线图（不含成交量）
+  // 使用单一ComposedChart组件
   return (
     <ResponsiveContainer width="100%" height={height}>
       <ComposedChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
@@ -212,11 +71,23 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
           tickFormatter={formatTime}
         />
         <YAxis 
+          yAxisId="price"
           stroke="#B0B0B0"
           fontSize={12}
           tickFormatter={formatPrice}
           domain={[minPrice - padding, maxPrice + padding]}
+          orientation="left"
         />
+        {showVolume && (
+          <YAxis 
+            yAxisId="volume"
+            stroke="#B0B0B0"
+            fontSize={10}
+            tickFormatter={formatVolume}
+            domain={[0, maxVolume * 1.1]}
+            orientation="right"
+          />
+        )}
         <Tooltip
           contentStyle={{
             backgroundColor: 'rgba(26, 26, 26, 0.95)',
@@ -224,14 +95,33 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
             borderRadius: '8px',
             color: '#FFFFFF',
           }}
-          formatter={(value: number, name: string) => [formatPrice(value), name]}
+          formatter={(value: number, name: string) => {
+            if (name === 'volume') {
+              return [formatVolume(value), '成交量'];
+            }
+            return [formatPrice(value), name];
+          }}
           labelFormatter={(time: string) => `时间: ${time}`}
         />
-        <Bar
+        {/* 价格线图 */}
+        <Line
+          yAxisId="price"
+          type="monotone"
           dataKey="close"
-          shape={<CustomCandlestick />}
-          fill="transparent"
+          stroke="#00D4AA"
+          strokeWidth={2}
+          dot={false}
+          activeDot={{ r: 4, stroke: '#00D4AA', strokeWidth: 2 }}
         />
+        {/* 成交量柱状图 */}
+        {showVolume && (
+          <Bar
+            yAxisId="volume"
+            dataKey="volume"
+            fill="#00D4AA"
+            fillOpacity={0.6}
+          />
+        )}
       </ComposedChart>
     </ResponsiveContainer>
   );
