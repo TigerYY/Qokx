@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>前端API集成测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        .price-display { font-size: 24px; font-weight: bold; color: #007bff; }
+        .change-positive { color: #28a745; }
+        .change-negative { color: #dc3545; }
+    </style>
+</head>
+<body>
+    <h1>🚀 前端API集成测试</h1>
+    
+    <div class="test-section info">
+        <h3>📊 实时价格数据</h3>
+        <div id="ticker-result">加载中...</div>
+    </div>
+    
+    <div class="test-section info">
+        <h3>📈 价格图表数据</h3>
+        <div id="chart-result">加载中...</div>
+    </div>
+    
+    <div class="test-section info">
+        <h3>🔍 市场数据</h3>
+        <div id="market-result">加载中...</div>
+    </div>
+    
+    <div class="test-section info">
+        <h3>🌐 前端页面测试</h3>
+        <div id="frontend-result">加载中...</div>
+    </div>
+    
+    <script>
+        async function testTickerAPI() {
+            const resultDiv = document.getElementById('ticker-result');
+            try {
+                const response = await fetch('http://localhost:8000/market/ticker?symbol=BTC-USDT');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const changeClass = data.data.changePercent24h >= 0 ? 'change-positive' : 'change-negative';
+                    const changeIcon = data.data.changePercent24h >= 0 ? '📈' : '📉';
+                    
+                    resultDiv.innerHTML = `
+                        <div class="price-display">$${data.data.last.toLocaleString()}</div>
+                        <div class="${changeClass}">
+                            ${changeIcon} ${(data.data.changePercent24h * 100).toFixed(2)}%
+                        </div>
+                        <div>24h成交量: ${data.data.volume24h.toLocaleString()} BTC</div>
+                        <div>更新时间: ${new Date(data.data.timestamp).toLocaleString()}</div>
+                    `;
+                    resultDiv.parentElement.className = 'test-section success';
+                } else {
+                    resultDiv.innerHTML = `❌ API返回失败: ${data.message}`;
+                    resultDiv.parentElement.className = 'test-section error';
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `❌ API调用失败: ${error.message}`;
+                resultDiv.parentElement.className = 'test-section error';
+            }
+        }
+        
+        async function testChartAPI() {
+            const resultDiv = document.getElementById('chart-result');
+            try {
+                const response = await fetch('http://localhost:8000/market/price-chart?symbol=BTC-USDT&timeframe=1H&limit=5');
+                const data = await response.json();
+                
+                if (data.success) {
+                    resultDiv.innerHTML = `
+                        <div>✅ 获取到 ${data.data.length} 条K线数据</div>
+                        <div>最新价格: $${data.data[data.data.length - 1]?.price?.toLocaleString() || 'N/A'}</div>
+                        <div>时间范围: ${data.data[0]?.time} - ${data.data[data.data.length - 1]?.time}</div>
+                    `;
+                    resultDiv.parentElement.className = 'test-section success';
+                } else {
+                    resultDiv.innerHTML = `❌ API返回失败: ${data.message}`;
+                    resultDiv.parentElement.className = 'test-section error';
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `❌ API调用失败: ${error.message}`;
+                resultDiv.parentElement.className = 'test-section error';
+            }
+        }
+        
+        async function testMarketAPI() {
+            const resultDiv = document.getElementById('market-result');
+            try {
+                const response = await fetch('http://localhost:8000/market/data?symbol=BTC-USDT&timeframe=1H&limit=3');
+                const data = await response.json();
+                
+                if (data.success) {
+                    resultDiv.innerHTML = `
+                        <div>✅ 获取到 ${data.data.length} 条市场数据</div>
+                        <div>最新收盘价: $${data.data[data.data.length - 1]?.close?.toLocaleString() || 'N/A'}</div>
+                        <div>数据完整性: ${data.data.every(item => item.open && item.high && item.low && item.close) ? '完整' : '不完整'}</div>
+                    `;
+                    resultDiv.parentElement.className = 'test-section success';
+                } else {
+                    resultDiv.innerHTML = `❌ API返回失败: ${data.message}`;
+                    resultDiv.parentElement.className = 'test-section error';
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `❌ API调用失败: ${error.message}`;
+                resultDiv.parentElement.className = 'test-section error';
+            }
+        }
+        
+        async function testFrontendPage() {
+            const resultDiv = document.getElementById('frontend-result');
+            try {
+                const response = await fetch('http://localhost:3000');
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <div>✅ 前端页面可访问</div>
+                        <div>状态码: ${response.status}</div>
+                        <div>内容类型: ${response.headers.get('content-type')}</div>
+                        <div><a href="http://localhost:3000" target="_blank">打开前端页面</a></div>
+                    `;
+                    resultDiv.parentElement.className = 'test-section success';
+                } else {
+                    resultDiv.innerHTML = `❌ 前端页面访问失败: HTTP ${response.status}`;
+                    resultDiv.parentElement.className = 'test-section error';
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `❌ 前端页面访问失败: ${error.message}`;
+                resultDiv.parentElement.className = 'test-section error';
+            }
+        }
+        
+        // 执行所有测试
+        async function runAllTests() {
+            console.log('🚀 开始执行所有测试...');
+            await testTickerAPI();
+            await testChartAPI();
+            await testMarketAPI();
+            await testFrontendPage();
+            console.log('✅ 所有测试完成');
+        }
+        
+        // 页面加载时执行测试
+        window.onload = runAllTests;
+    </script>
+</body>
+</html>

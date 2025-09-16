@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Grid,
   Box,
@@ -27,6 +27,7 @@ import {
 import PriceChart from '@/components/Charts/PriceChart';
 import RecentTrades from '@/components/Trading/RecentTrades';
 import { Trade } from '@/types';
+import { api } from '@/services/api';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -56,17 +57,95 @@ const TradingInterface: React.FC = () => {
   const [direction, setDirection] = useState('buy');
   const [quantity, setQuantity] = useState('');
   const [price, setPrice] = useState('');
+  
+  // 实时数据状态
+  const [priceData, setPriceData] = useState<Array<{ time: string; price: number }>>([]);
+  const [tickerData, setTickerData] = useState<any>(null);
+  const [isLoadingPrice, setIsLoadingPrice] = useState(false);
 
-  // 模拟数据
-  const priceData = [
-    { time: '09:00', price: 95000 },
-    { time: '10:00', price: 95200 },
-    { time: '11:00', price: 94800 },
-    { time: '12:00', price: 95500 },
-    { time: '13:00', price: 95800 },
-    { time: '14:00', price: 96200 },
-    { time: '15:00', price: 96000 },
-  ];
+  // 获取价格图表数据
+  const fetchPriceData = async () => {
+    try {
+      setIsLoadingPrice(true);
+      console.log('Trading页面：开始获取价格数据...');
+      const response = await api.get('/market/price-chart', {
+        params: { 
+          symbol: 'BTC-USDT', 
+          timeframe: '1H', 
+          limit: 24 
+        }
+      });
+      
+      console.log('Trading页面：价格数据响应:', response);
+      
+      if (response.data.success) {
+        const formattedData = response.data.data.map((candle: any) => ({
+          time: new Date(candle.time).toLocaleTimeString('zh-CN', { 
+            hour: '2-digit', 
+            minute: '2-digit' 
+          }),
+          price: candle.price
+        }));
+        setPriceData(formattedData);
+        console.log('Trading页面：价格数据设置成功:', formattedData);
+      } else {
+        console.error('Trading页面：API返回失败:', response.data.message);
+        // 使用模拟数据作为后备
+        setPriceData([
+          { time: '09:00', price: 95000 },
+          { time: '10:00', price: 95200 },
+          { time: '11:00', price: 94800 },
+          { time: '12:00', price: 95500 },
+          { time: '13:00', price: 95800 },
+          { time: '14:00', price: 96200 },
+          { time: '15:00', price: 96000 },
+        ]);
+      }
+    } catch (error) {
+      console.error('Trading页面：获取价格数据失败:', error);
+      // 使用模拟数据作为后备
+      setPriceData([
+        { time: '09:00', price: 95000 },
+        { time: '10:00', price: 95200 },
+        { time: '11:00', price: 94800 },
+        { time: '12:00', price: 95500 },
+        { time: '13:00', price: 95800 },
+        { time: '14:00', price: 96200 },
+        { time: '15:00', price: 96000 },
+      ]);
+    } finally {
+      setIsLoadingPrice(false);
+    }
+  };
+
+  // 获取实时价格数据
+  const fetchTickerData = async () => {
+    try {
+      console.log('Trading页面：开始获取实时价格数据...');
+      const response = await api.get('/market/ticker', {
+        params: { symbol: 'BTC-USDT' }
+      });
+      
+      console.log('Trading页面：价格数据响应:', response);
+      
+      if (response.data.success) {
+        setTickerData(response.data.data);
+        console.log('Trading页面：价格数据设置成功:', response.data.data);
+      } else {
+        console.error('Trading页面：API返回失败:', response.data.message);
+      }
+    } catch (error) {
+      console.error('Trading页面：获取实时价格数据失败:', error);
+    }
+  };
+
+  // 初始加载数据
+  useEffect(() => {
+    console.log('Trading页面：组件加载，开始获取数据...');
+    console.log('API baseURL:', process.env.REACT_APP_API_BASE_URL);
+    fetchPriceData();
+    fetchTickerData();
+  }, []);
 
   const recentTrades: Trade[] = [
     {
@@ -123,6 +202,12 @@ const TradingInterface: React.FC = () => {
     console.log('下单:', { orderType, direction, quantity, price });
   };
 
+  const handleRefresh = () => {
+    console.log('Trading页面：手动刷新数据...');
+    fetchPriceData();
+    fetchTickerData();
+  };
+
   return (
     <Box>
       {/* 页面标题和操作 */}
@@ -162,6 +247,8 @@ const TradingInterface: React.FC = () => {
           <Button
             variant="outlined"
             startIcon={<Refresh />}
+            onClick={handleRefresh}
+            disabled={isLoadingPrice}
           >
             刷新
           </Button>
@@ -183,11 +270,27 @@ const TradingInterface: React.FC = () => {
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
                 <Typography variant="h6" sx={{ fontWeight: 600 }}>
                   BTC-USDT 实时价格
+                  {tickerData && (
+                    <Box component="span" sx={{ ml: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Typography variant="h5" sx={{ fontWeight: 700, color: 'primary.main' }}>
+                        ${tickerData.last?.toLocaleString() || 'N/A'}
+                      </Typography>
+                      {tickerData.changePercent24h && (
+                        <Chip 
+                          label={`${(tickerData.changePercent24h * 100).toFixed(2)}%`}
+                          size="small"
+                          color={tickerData.changePercent24h >= 0 ? 'success' : 'error'}
+                          icon={tickerData.changePercent24h >= 0 ? <TrendingUp /> : <TrendingDown />}
+                        />
+                      )}
+                    </Box>
+                  )}
                 </Typography>
                 <Box sx={{ display: 'flex', gap: 1 }}>
                   <Chip label="1H" size="small" color="primary" />
                   <Chip label="4H" size="small" />
                   <Chip label="1D" size="small" />
+                  {isLoadingPrice && <Chip label="加载中..." size="small" color="info" />}
                 </Box>
               </Box>
               <PriceChart data={priceData} type="area" height={400} />

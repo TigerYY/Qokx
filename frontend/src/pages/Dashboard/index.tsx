@@ -25,24 +25,97 @@ import SystemStatus from '@/components/System/SystemStatus';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useTradingData } from '@/hooks/useTradingData';
 import { Trade } from '@/types';
+import { api } from '@/services/api';
 
 const Dashboard: React.FC = () => {
   const [refreshKey, setRefreshKey] = useState(0);
+  const [priceData, setPriceData] = useState<Array<{time: string; price: number}>>([]);
+  const [tickerData, setTickerData] = useState<any>(null);
+  const [isLoadingPrice, setIsLoadingPrice] = useState(false);
   const { data: tradingData, isLoading, refetch } = useTradingData();
   const { lastMessage } = useWebSocket('ws://localhost:8000/ws');
 
-  // 模拟实时数据更新
+  // 获取真实价格数据
+  const fetchPriceData = async () => {
+    try {
+      console.log('开始获取价格图表数据...');
+      setIsLoadingPrice(true);
+      const response = await api.get('/market/price-chart', {
+        params: { symbol: 'BTC-USDT', timeframe: '1H', limit: 24 }
+      });
+      
+      console.log('价格图表数据响应:', response);
+      
+      if (response.data.success) {
+        setPriceData(response.data.data);
+        console.log('价格图表数据设置成功:', response.data.data);
+      } else {
+        console.error('价格图表API返回失败:', response.data.message);
+      }
+    } catch (error) {
+      console.error('获取价格数据失败:', error);
+    } finally {
+      setIsLoadingPrice(false);
+    }
+  };
+
+  // 获取实时价格数据
+  const fetchTickerData = async () => {
+    try {
+      console.log('开始获取实时价格数据...');
+      const response = await api.get('/market/ticker', {
+        params: { symbol: 'BTC-USDT' }
+      });
+      
+      console.log('价格数据响应:', response);
+      
+      if (response.data.success) {
+        setTickerData(response.data.data);
+        console.log('价格数据设置成功:', response.data.data);
+      } else {
+        console.error('API返回失败:', response.data.message);
+      }
+    } catch (error) {
+      console.error('获取实时价格数据失败:', error);
+    }
+  };
+
+  // 处理WebSocket实时数据更新
   useEffect(() => {
     if (lastMessage) {
-      // 处理WebSocket消息
-      console.log('收到实时数据:', lastMessage);
-      refetch();
+      try {
+        // 如果lastMessage是字符串，则解析JSON
+        const message = typeof lastMessage === 'string' ? JSON.parse(lastMessage) : lastMessage;
+        if (message.type === 'price_update' && message.symbol === 'BTC-USDT') {
+          // 更新实时价格数据
+          setTickerData(message.data);
+          console.log('收到实时价格更新:', message.data);
+        } else {
+          // 处理其他WebSocket消息
+          console.log('收到实时数据:', message);
+          refetch();
+        }
+      } catch (error) {
+        // 处理非JSON消息
+        console.log('收到实时数据:', lastMessage);
+        refetch();
+      }
     }
   }, [lastMessage, refetch]);
+
+  // 初始加载数据
+  useEffect(() => {
+    console.log('Dashboard组件加载，开始获取数据...');
+    console.log('API baseURL:', process.env.REACT_APP_API_BASE_URL);
+    fetchPriceData();
+    fetchTickerData();
+  }, [refreshKey]);
 
   const handleRefresh = () => {
     setRefreshKey(prev => prev + 1);
     refetch();
+    fetchPriceData();
+    fetchTickerData();
   };
 
   // 模拟数据
@@ -56,7 +129,8 @@ const Dashboard: React.FC = () => {
     systemStatus: 'healthy' as const,
   };
 
-  const priceData = [
+  // 使用真实价格数据，如果没有则使用模拟数据
+  const displayPriceData = priceData.length > 0 ? priceData : [
     { time: '09:00', price: 95000 },
     { time: '10:00', price: 95200 },
     { time: '11:00', price: 94800 },
@@ -191,6 +265,18 @@ const Dashboard: React.FC = () => {
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
           <MetricCard
+            title="BTC价格"
+            value={tickerData ? tickerData.last : 95000}
+            change={tickerData ? tickerData.changePercent24h * 100 : 0}
+            changeLabel="24h变化"
+            icon={<TrendingUp />}
+            color="info"
+            trend={tickerData && tickerData.changePercent24h > 0 ? "up" : "down"}
+            subtitle="USDT"
+          />
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <MetricCard
             title="胜率"
             value={`${dashboardStats.winRate}%`}
             progress={dashboardStats.winRate}
@@ -226,6 +312,14 @@ const Dashboard: React.FC = () => {
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
                 <Typography variant="h6" sx={{ fontWeight: 600 }}>
                   BTC-USDT 价格走势
+                  {isLoadingPrice && (
+                    <Chip 
+                      label="加载中..." 
+                      size="small" 
+                      color="info" 
+                      sx={{ ml: 2 }}
+                    />
+                  )}
                 </Typography>
                 <Box sx={{ display: 'flex', gap: 1 }}>
                   <Chip label="1H" size="small" color="primary" />
@@ -233,7 +327,7 @@ const Dashboard: React.FC = () => {
                   <Chip label="1D" size="small" />
                 </Box>
               </Box>
-              <PriceChart data={priceData} />
+              <PriceChart data={displayPriceData} />
             </CardContent>
           </Card>
         </Grid>

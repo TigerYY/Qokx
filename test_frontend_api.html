@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>前端API测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-result { margin: 10px 0; padding: 10px; border-radius: 5px; }
+        .success { background-color: #d4edda; border: 1px solid #c3e6cb; color: #155724; }
+        .error { background-color: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; }
+        .info { background-color: #d1ecf1; border: 1px solid #bee5eb; color: #0c5460; }
+    </style>
+</head>
+<body>
+    <h1>前端API测试</h1>
+    <div id="results"></div>
+    
+    <script>
+        async function testAPI() {
+            const resultsDiv = document.getElementById('results');
+            
+            // 测试后端API
+            try {
+                resultsDiv.innerHTML += '<div class="test-result info">正在测试后端API...</div>';
+                
+                const response = await fetch('http://localhost:8000/market/ticker?symbol=BTC-USDT');
+                const data = await response.json();
+                
+                if (data.success) {
+                    resultsDiv.innerHTML += `
+                        <div class="test-result success">
+                            <h3>✅ 后端API正常</h3>
+                            <p>BTC价格: $${data.data.last.toLocaleString()}</p>
+                            <p>24h变化: ${(data.data.changePercent24h * 100).toFixed(2)}%</p>
+                            <p>24h成交量: ${data.data.volume24h.toLocaleString()} BTC</p>
+                        </div>
+                    `;
+                } else {
+                    resultsDiv.innerHTML += `<div class="test-result error">❌ 后端API返回失败: ${data.message}</div>`;
+                }
+            } catch (error) {
+                resultsDiv.innerHTML += `<div class="test-result error">❌ 后端API调用失败: ${error.message}</div>`;
+            }
+            
+            // 测试前端页面
+            try {
+                resultsDiv.innerHTML += '<div class="test-result info">正在测试前端页面...</div>';
+                
+                const frontendResponse = await fetch('http://localhost:3000');
+                if (frontendResponse.ok) {
+                    resultsDiv.innerHTML += '<div class="test-result success">✅ 前端页面可访问</div>';
+                } else {
+                    resultsDiv.innerHTML += `<div class="test-result error">❌ 前端页面访问失败: ${frontendResponse.status}</div>`;
+                }
+            } catch (error) {
+                resultsDiv.innerHTML += `<div class="test-result error">❌ 前端页面访问失败: ${error.message}</div>`;
+            }
+            
+            // 测试价格图表API
+            try {
+                resultsDiv.innerHTML += '<div class="test-result info">正在测试价格图表API...</div>';
+                
+                const chartResponse = await fetch('http://localhost:8000/market/price-chart?symbol=BTC-USDT&timeframe=1H&limit=5');
+                const chartData = await chartResponse.json();
+                
+                if (chartData.success) {
+                    resultsDiv.innerHTML += `
+                        <div class="test-result success">
+                            <h3>✅ 价格图表API正常</h3>
+                            <p>获取到 ${chartData.data.length} 条K线数据</p>
+                            <ul>
+                                ${chartData.data.map(candle => `<li>${candle.time}: $${candle.price.toLocaleString()}</li>`).join('')}
+                            </ul>
+                        </div>
+                    `;
+                } else {
+                    resultsDiv.innerHTML += `<div class="test-result error">❌ 价格图表API返回失败: ${chartData.message}</div>`;
+                }
+            } catch (error) {
+                resultsDiv.innerHTML += `<div class="test-result error">❌ 价格图表API调用失败: ${error.message}</div>`;
+            }
+        }
+        
+        // 页面加载时执行测试
+        window.onload = testAPI;
+    </script>
+</body>
+</html>

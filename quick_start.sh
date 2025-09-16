@@ -30,8 +30,13 @@ fi
 if [ ! -f "frontend/.env" ]; then
     echo -e "${YELLOW}创建前端环境变量文件...${NC}"
     cat > frontend/.env << EOF
-REACT_APP_API_BASE_URL=http://localhost:8000/api
+REACT_APP_API_BASE_URL=http://localhost:8000
 REACT_APP_WS_URL=ws://localhost:8000/ws
+REACT_APP_NAME=YY自动交易系统 for OKX
+REACT_APP_VERSION=2.0.0
+REACT_APP_DEBUG=true
+REACT_APP_LOG_LEVEL=info
+PORT=3000
 EOF
 fi
 
@@ -49,7 +54,7 @@ sleep 3
 echo -e "${BLUE}启动前端服务...${NC}"
 cd frontend
 npm install >/dev/null 2>&1
-nohup npm start > ../logs/frontend.log 2>&1 &
+PORT=3000 nohup npm start > ../logs/frontend.log 2>&1 &
 echo $! > ../.frontend.pid
 cd ..
 

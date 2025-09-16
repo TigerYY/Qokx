@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API直接测试</title>
+</head>
+<body>
+    <h1>API直接测试</h1>
+    <div id="result"></div>
+    
+    <script>
+        async function testAPI() {
+            const resultDiv = document.getElementById('result');
+            
+            try {
+                // 测试后端API
+                const response = await fetch('http://localhost:8000/market/ticker?symbol=BTC-USDT');
+                const data = await response.json();
+                
+                if (data.success) {
+                    resultDiv.innerHTML = `
+                        <h2>✅ API测试成功</h2>
+                        <p>BTC价格: $${data.data.last.toLocaleString()}</p>
+                        <p>24h变化: ${(data.data.changePercent24h * 100).toFixed(2)}%</p>
+                        <p>24h成交量: ${data.data.volume24h.toLocaleString()} BTC</p>
+                        <p>时间戳: ${new Date(data.data.timestamp).toLocaleString()}</p>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `<h2>❌ API返回失败</h2><p>${data.message}</p>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<h2>❌ API调用失败</h2><p>${error.message}</p>`;
+            }
+        }
+        
+        testAPI();
+    </script>
+</body>
+</html>

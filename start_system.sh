@@ -275,18 +275,19 @@ start_frontend() {
     if [ ! -f ".env" ]; then
         log_info "创建前端环境变量文件..."
         cat > .env << EOF
-REACT_APP_API_BASE_URL=http://localhost:8000/api
+REACT_APP_API_BASE_URL=http://localhost:8000
 REACT_APP_WS_URL=ws://localhost:8000/ws
-REACT_APP_NAME=OKX Trading System
+REACT_APP_NAME=YY自动交易系统 for OKX
 REACT_APP_VERSION=2.0.0
 REACT_APP_DEBUG=true
 REACT_APP_LOG_LEVEL=info
+PORT=3000
 EOF
     fi
     
     # 启动React服务
     log_info "启动React服务 (端口: 3000)..."
-    nohup npm start > ../logs/frontend.log 2>&1 &
+    PORT=3000 nohup npm start > ../logs/frontend.log 2>&1 &
     FRONTEND_PID=$!
     
     cd ..

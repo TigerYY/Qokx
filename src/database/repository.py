@@ -156,9 +156,10 @@ class StrategyRepository(BaseRepository):
         try:
             strategy = StrategyVersion(**strategy_data)
             self.session.add(strategy)
-            self.session.flush()
+            self.session.commit()  # 提交事务
             return strategy
         except SQLAlchemyError as e:
+            self.session.rollback()  # 回滚事务
             self._handle_exception(e, "创建策略版本")
     
     def get_strategy_version(self, strategy_id: str, version: str) -> Optional[StrategyVersion]:
@@ -204,8 +205,10 @@ class StrategyRepository(BaseRepository):
                                  StrategyVersion.version == version))
                      .update({'is_active': True}))
             
+            self.session.commit()  # 提交事务
             return result > 0
         except SQLAlchemyError as e:
+            self.session.rollback()  # 回滚事务
             self._handle_exception(e, "激活策略版本")
     
     def deactivate_strategy(self, strategy_id: str) -> bool:

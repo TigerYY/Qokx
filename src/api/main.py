@@ -9,6 +9,8 @@ import logging
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 from contextlib import asynccontextmanager
+import threading
+import time
 
 from fastapi import FastAPI, HTTPException, Depends, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,6 +25,8 @@ from ..database.repository import (
 )
 from ..config.dynamic_config import init_config_manager
 from ..strategies.version_control import get_strategy_version_manager, get_ab_test_manager
+from ..utils.okx_public_client import get_public_client
+from .grid_trading import router as grid_trading_router
 
 # 设置日志
 logging.basicConfig(level=logging.INFO)
@@ -53,6 +57,56 @@ class ConnectionManager:
                 self.disconnect(connection)
 
 manager = ConnectionManager()
+
+# 实时数据缓存
+price_cache = {
+    "BTC-USDT": {
+        "last": 0,
+        "change24h": 0,
+        "changePercent24h": 0,
+        "volume24h": 0,
+        "timestamp": 0
+    }
+}
+
+# 实时数据更新任务
+def update_price_data():
+    """定时更新价格数据"""
+    while True:
+        try:
+            client = get_public_client()
+            
+            # 更新BTC-USDT价格
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            ticker = loop.run_until_complete(client.get_ticker("BTC-USDT"))
+            if ticker:
+                price_cache["BTC-USDT"] = {
+                    "last": float(ticker.get("last", 0)),
+                    "change24h": float(ticker.get("chg", 0)),
+                    "changePercent24h": float(ticker.get("chgPct", 0)),
+                    "volume24h": float(ticker.get("vol24h", 0)),
+                    "timestamp": int(ticker.get("ts", 0))
+                }
+                
+                # 广播价格更新
+                price_update = {
+                    "type": "price_update",
+                    "symbol": "BTC-USDT",
+                    "data": price_cache["BTC-USDT"]
+                }
+                asyncio.run(manager.broadcast(str(price_update)))
+                
+            loop.close()
+            
+        except Exception as e:
+            logger.error(f"更新价格数据失败: {e}")
+        
+        time.sleep(10)  # 每10秒更新一次
+
+# 启动价格更新线程
+price_update_thread = threading.Thread(target=update_price_data, daemon=True)
 
 # 请求模型
 class TradeCreate(BaseModel):
@@ -106,6 +160,11 @@ async def lifespan(app: FastAPI):
     logger.info("启动API服务...")
     init_database()
     init_config_manager()
+    
+    # 启动价格更新线程
+    price_update_thread.start()
+    logger.info("价格更新线程已启动")
+    
     logger.info("API服务启动完成")
     
     yield
@@ -146,6 +205,9 @@ def get_config_repository():
 def get_performance_repository():
     with get_db_session() as session:
         return PerformanceRepository(session)
+
+# 注册路由
+app.include_router(grid_trading_router)
 
 # 根路径
 @app.get("/")
@@ -351,7 +413,16 @@ async def start_strategy(
 ):
     """启动策略"""
     try:
-        success = strategy_repo.activate_strategy_version(strategy_id, "1.0.0")
+        # 先获取策略的最新版本
+        strategy = strategy_repo.get_active_strategy(strategy_id)
+        if not strategy:
+            # 如果没有激活的策略，获取最新版本
+            strategies = strategy_repo.get_strategy_versions(strategy_id)
+            if not strategies:
+                raise HTTPException(status_code=404, detail="策略未找到")
+            strategy = strategies[0]  # 获取最新版本
+        
+        success = strategy_repo.activate_strategy_version(strategy_id, strategy.version)
         if not success:
             raise HTTPException(status_code=400, detail="启动策略失败")
         
@@ -456,27 +527,108 @@ async def get_performance_metrics(
 
 # 市场数据API
 @app.get("/market/data")
-async def get_market_data(symbol: str = "BTC-USDT", timeframe: str = "1h"):
-    """获取市场数据"""
+async def get_market_data(symbol: str = "BTC-USDT", timeframe: str = "1H", limit: int = 100):
+    """获取市场数据 - 从OKX API获取真实数据"""
     try:
-        # 模拟市场数据
-        import random
-        base_price = 95000
+        client = get_public_client()
+        
+        # 获取K线数据
+        candles = await client.get_candles(inst_id=symbol, bar=timeframe, limit=limit)
+        
+        # 转换数据格式
         data = []
-        for i in range(100):
-            price = base_price + random.uniform(-1000, 1000)
+        for candle in candles:
+            # OKX K线数据格式: [timestamp, open, high, low, close, volume, volCcy, volCcyQuote, confirm]
             data.append({
-                "timestamp": (datetime.utcnow().timestamp() - (100 - i) * 3600) * 1000,
-                "open": price,
-                "high": price + random.uniform(0, 100),
-                "low": price - random.uniform(0, 100),
-                "close": price + random.uniform(-50, 50),
-                "volume": random.uniform(100, 1000)
+                "timestamp": int(candle[0]),  # 时间戳(毫秒)
+                "open": float(candle[1]),     # 开盘价
+                "high": float(candle[2]),     # 最高价
+                "low": float(candle[3]),      # 最低价
+                "close": float(candle[4]),    # 收盘价
+                "volume": float(candle[5]),   # 成交量
+                "volCcy": float(candle[6]),   # 成交额(币种)
+                "volCcyQuote": float(candle[7])  # 成交额(计价币种)
             })
         
         return ApiResponse(success=True, data=data)
     except Exception as e:
         logger.error(f"获取市场数据失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/market/ticker")
+async def get_ticker_data(symbol: str = "BTC-USDT"):
+    """获取实时价格数据"""
+    try:
+        # 优先使用缓存数据
+        if symbol in price_cache and price_cache[symbol]["last"] > 0:
+            cached_data = price_cache[symbol]
+            ticker_data = {
+                "symbol": symbol,
+                "last": cached_data["last"],
+                "change24h": cached_data["change24h"],
+                "changePercent24h": cached_data["changePercent24h"],
+                "volume24h": cached_data["volume24h"],
+                "timestamp": cached_data["timestamp"]
+            }
+            return ApiResponse(success=True, data=ticker_data)
+        
+        # 如果缓存没有数据，则实时获取
+        client = get_public_client()
+        ticker = await client.get_ticker(symbol)
+        
+        if not ticker:
+            raise HTTPException(status_code=404, detail="未找到该交易对数据")
+        
+        # 转换数据格式
+        ticker_data = {
+            "symbol": ticker.get("instId"),
+            "last": float(ticker.get("last", 0)),
+            "open24h": float(ticker.get("open24h", 0)),
+            "high24h": float(ticker.get("high24h", 0)),
+            "low24h": float(ticker.get("low24h", 0)),
+            "volume24h": float(ticker.get("vol24h", 0)),
+            "change24h": float(ticker.get("chg", 0)),
+            "changePercent24h": float(ticker.get("chgPct", 0)),
+            "timestamp": int(ticker.get("ts", 0))
+        }
+        
+        return ApiResponse(success=True, data=ticker_data)
+    except Exception as e:
+        logger.error(f"获取实时价格数据失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/market/price-chart")
+async def get_price_chart_data(symbol: str = "BTC-USDT", timeframe: str = "1H", limit: int = 24):
+    """获取价格图表数据 - 专门为前端图表优化"""
+    try:
+        client = get_public_client()
+        
+        # 获取K线数据
+        candles = await client.get_candles(inst_id=symbol, bar=timeframe, limit=limit)
+        
+        # 转换数据格式为前端图表所需格式
+        chart_data = []
+        for candle in candles:
+            # 转换时间戳为可读格式
+            timestamp = int(candle[0])
+            time_str = datetime.fromtimestamp(timestamp / 1000).strftime("%H:%M")
+            
+            chart_data.append({
+                "time": time_str,
+                "price": float(candle[4]),  # 收盘价
+                "open": float(candle[1]),   # 开盘价
+                "high": float(candle[2]),   # 最高价
+                "low": float(candle[3]),    # 最低价
+                "volume": float(candle[5]), # 成交量
+                "timestamp": timestamp
+            })
+        
+        # 按时间排序（从早到晚）
+        chart_data.sort(key=lambda x: x["timestamp"])
+        
+        return ApiResponse(success=True, data=chart_data)
+    except Exception as e:
+        logger.error(f"获取价格图表数据失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # A/B测试API
