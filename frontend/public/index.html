@@ -19,5 +19,32 @@
   <body>
     <noscript>您需要启用 JavaScript 来运行此应用程序。</noscript>
     <div id="root"></div>
+    
+    <!-- 防止浏览器扩展冲突 -->
+    <script>
+      // 防止TronLink等钱包扩展冲突
+      (function() {
+        // 保护window对象的关键属性
+        const originalDefineProperty = Object.defineProperty;
+        Object.defineProperty = function(obj, prop, descriptor) {
+          if (obj === window && (prop === 'tronLink' || prop === 'ethereum' || prop === 'web3')) {
+            // 如果属性已存在且不可写，则跳过
+            if (obj.hasOwnProperty(prop) && !obj.propertyIsEnumerable(prop)) {
+              return obj;
+            }
+          }
+          return originalDefineProperty.call(this, obj, prop, descriptor);
+        };
+        
+        // 防止扩展覆盖全局对象
+        const originalSetPrototypeOf = Object.setPrototypeOf;
+        Object.setPrototypeOf = function(obj, proto) {
+          if (obj === window && proto && proto.tronLink) {
+            return obj;
+          }
+          return originalSetPrototypeOf.call(this, obj, proto);
+        };
+      })();
+    </script>
   </body>
 </html>

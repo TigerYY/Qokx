@@ -8,6 +8,10 @@ import CssBaseline from '@mui/material/CssBaseline';
 import App from './App';
 import theme from './styles/theme';
 import './styles/global.css';
+import { setupErrorHandling } from './utils/errorHandler';
+
+// 设置错误处理
+setupErrorHandling();
 
 // 创建 React Query 客户端
 const queryClient = new QueryClient({

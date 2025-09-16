@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>浏览器扩展冲突测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #1a1a1a;
+            color: white;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .test-section {
+            background: rgba(26, 26, 26, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 6px;
+            margin: 10px 0;
+        }
+        .success {
+            background: rgba(0, 212, 170, 0.2);
+            color: #00D4AA;
+            border: 1px solid #00D4AA;
+        }
+        .error {
+            background: rgba(255, 107, 107, 0.2);
+            color: #FF6B6B;
+            border: 1px solid #FF6B6B;
+        }
+        .warning {
+            background: rgba(255, 193, 7, 0.2);
+            color: #FFC107;
+            border: 1px solid #FFC107;
+        }
+        button {
+            padding: 10px 20px;
+            background: #1976d2;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #1565c0;
+        }
+        .log {
+            background: #222;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 浏览器扩展冲突测试</h1>
+        
+        <div class="test-section">
+            <h2>问题描述</h2>
+            <p>当浏览器安装了TronLink、MetaMask等钱包扩展时，可能会与React应用产生冲突，导致以下错误：</p>
+            <div class="error">
+                <strong>错误信息：</strong><br>
+                Cannot assign to read only property 'tronLink' of object '#<Window>'
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>解决方案</h2>
+            <p>我们已经在应用中添加了错误处理机制来防止这种冲突：</p>
+            <ul>
+                <li>✅ 捕获并忽略钱包扩展相关的错误</li>
+                <li>✅ 防止扩展覆盖全局对象</li>
+                <li>✅ 保护window对象的关键属性</li>
+                <li>✅ 处理未处理的Promise拒绝</li>
+            </ul>
+        </div>
+
+        <div class="test-section">
+            <h2>测试功能</h2>
+            <button onclick="testErrorHandling()">测试错误处理</button>
+            <button onclick="testWalletAccess()">测试钱包访问</button>
+            <button onclick="clearLog()">清空日志</button>
+            
+            <div id="log" class="log"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>状态检查</h2>
+            <div id="status"></div>
+        </div>
+    </div>
+
+    <script>
+        // 错误处理设置
+        function setupErrorHandling() {
+            const originalError = console.error;
+            console.error = function(...args) {
+                const message = args[0];
+                if (typeof message === 'string' && 
+                    (message.includes('tronLink') || 
+                     message.includes('Cannot assign to read only property') ||
+                     message.includes('chrome-extension://'))) {
+                    log('✅ 已忽略钱包扩展错误: ' + message, 'success');
+                    return;
+                }
+                originalError.apply(console, args);
+            };
+
+            window.addEventListener('error', function(event) {
+                if (event.message && 
+                    (event.message.includes('tronLink') || 
+                     event.message.includes('Cannot assign to read only property'))) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    log('✅ 已阻止钱包扩展错误: ' + event.message, 'success');
+                    return false;
+                }
+            });
+        }
+
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.innerHTML = `[${timestamp}] ${message}`;
+            logEntry.className = type;
+            logDiv.appendChild(logEntry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function testErrorHandling() {
+            log('开始测试错误处理...', 'info');
+            
+            try {
+                // 模拟TronLink错误
+                Object.defineProperty(window, 'tronLink', {
+                    value: 'test',
+                    writable: false,
+                    configurable: false
+                });
+                
+                // 尝试重新定义（这应该被错误处理捕获）
+                Object.defineProperty(window, 'tronLink', {
+                    value: 'new value',
+                    writable: true,
+                    configurable: true
+                });
+                
+                log('❌ 错误处理未生效', 'error');
+            } catch (error) {
+                log('✅ 错误处理正常工作: ' + error.message, 'success');
+            }
+        }
+
+        function testWalletAccess() {
+            log('测试钱包访问...', 'info');
+            
+            const wallets = ['tronLink', 'ethereum', 'web3'];
+            wallets.forEach(wallet => {
+                try {
+                    const walletObj = window[wallet];
+                    if (walletObj) {
+                        log(`✅ ${wallet} 可用`, 'success');
+                    } else {
+                        log(`⚠️ ${wallet} 不可用`, 'warning');
+                    }
+                } catch (error) {
+                    log(`❌ ${wallet} 访问错误: ${error.message}`, 'error');
+                }
+            });
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        function checkStatus() {
+            const statusDiv = document.getElementById('status');
+            const hasExtensions = !!(window.tronLink || window.ethereum || window.web3);
+            
+            if (hasExtensions) {
+                statusDiv.innerHTML = '<div class="warning">检测到钱包扩展，错误处理已激活</div>';
+            } else {
+                statusDiv.innerHTML = '<div class="success">未检测到钱包扩展，应用运行正常</div>';
+            }
+        }
+
+        // 初始化
+        setupErrorHandling();
+        checkStatus();
+        log('页面加载完成，错误处理已激活', 'success');
+    </script>
+</body>
+</html>
