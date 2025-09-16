@@ -17,11 +17,69 @@ class TimeframeConfig:
 
 
 @dataclass
+class DataConfig:
+    """数据配置"""
+    # 数据源配置
+    data_source: str = "okx"  # 数据源
+    update_interval: int = 1  # 更新间隔(秒)
+    max_retries: int = 3  # 最大重试次数
+    retry_delay: int = 5  # 重试延迟(秒)
+    
+    # 数据存储配置
+    enable_caching: bool = True  # 启用缓存
+    cache_size: int = 1000  # 缓存大小
+    cache_ttl: int = 300  # 缓存TTL(秒)
+    
+    # 数据质量配置
+    enable_data_validation: bool = True  # 启用数据验证
+    min_volume_threshold: float = 0.0  # 最小成交量阈值
+    max_price_change: float = 0.1  # 最大价格变化阈值
+    
+    # WebSocket配置
+    ws_reconnect_interval: int = 5  # WebSocket重连间隔(秒)
+    ws_heartbeat_interval: int = 30  # 心跳间隔(秒)
+    ws_max_reconnect_attempts: int = 10  # 最大重连尝试次数
+
+
+@dataclass
 class MarketStateConfig:
     """市场状态识别配置"""
     adx_threshold: float = 25.0  # ADX趋势阈值
     volatility_threshold: float = 0.02  # 波动率阈值
     trend_strength_window: int = 20  # 趋势强度计算窗口
+
+
+@dataclass
+class TradingConfig:
+    """交易配置"""
+    # 基础交易配置
+    default_symbol: str = "BTC-USDT"
+    max_position_size: float = 0.1  # 最大仓位比例
+    min_order_size: float = 0.001  # 最小订单大小
+    max_order_size: float = 1.0  # 最大订单大小
+    
+    # 风险控制配置
+    max_daily_loss: float = 0.05  # 最大日亏损比例
+    max_drawdown: float = 0.15  # 最大回撤比例
+    stop_loss_percent: float = 0.02  # 止损百分比
+    take_profit_percent: float = 0.04  # 止盈百分比
+    
+    # 订单配置
+    order_timeout: int = 30  # 订单超时时间(秒)
+    max_retry_attempts: int = 3  # 最大重试次数
+    retry_delay: float = 1.0  # 重试延迟(秒)
+    
+    # 滑点控制
+    max_slippage: float = 0.001  # 最大滑点
+    slippage_tolerance: float = 0.0005  # 滑点容忍度
+    
+    # 杠杆配置
+    max_leverage: float = 1.0  # 最大杠杆
+    default_leverage: float = 1.0  # 默认杠杆
+    
+    # 手续费配置
+    maker_fee: float = 0.001  # Maker手续费
+    taker_fee: float = 0.001  # Taker手续费
 
 
 @dataclass
