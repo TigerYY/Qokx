@@ -62,16 +62,17 @@ const TradingInterface: React.FC = () => {
   const [priceData, setPriceData] = useState<Array<{ time: string; price: number }>>([]);
   const [tickerData, setTickerData] = useState<any>(null);
   const [isLoadingPrice, setIsLoadingPrice] = useState(false);
+  const [selectedTimeframe, setSelectedTimeframe] = useState('1H');
 
   // 获取价格图表数据
-  const fetchPriceData = async () => {
+  const fetchPriceData = async (timeframe: string = selectedTimeframe) => {
     try {
       setIsLoadingPrice(true);
-      console.log('Trading页面：开始获取价格数据...');
+      console.log('Trading页面：开始获取价格数据...', timeframe);
       const response = await api.get('/market/price-chart', {
         params: { 
           symbol: 'BTC-USDT', 
-          timeframe: '1H', 
+          timeframe: timeframe, 
           limit: 24 
         }
       });
@@ -208,6 +209,12 @@ const TradingInterface: React.FC = () => {
     fetchTickerData();
   };
 
+  // 处理时间框架切换
+  const handleTimeframeChange = (timeframe: string) => {
+    setSelectedTimeframe(timeframe);
+    fetchPriceData(timeframe);
+  };
+
   return (
     <Box>
       {/* 页面标题和操作 */}
@@ -287,9 +294,27 @@ const TradingInterface: React.FC = () => {
                   )}
                 </Typography>
                 <Box sx={{ display: 'flex', gap: 1 }}>
-                  <Chip label="1H" size="small" color="primary" />
-                  <Chip label="4H" size="small" />
-                  <Chip label="1D" size="small" />
+                  <Chip 
+                    label="1H" 
+                    size="small" 
+                    color={selectedTimeframe === '1H' ? 'primary' : 'default'}
+                    onClick={() => handleTimeframeChange('1H')}
+                    sx={{ cursor: 'pointer' }}
+                  />
+                  <Chip 
+                    label="4H" 
+                    size="small" 
+                    color={selectedTimeframe === '4H' ? 'primary' : 'default'}
+                    onClick={() => handleTimeframeChange('4H')}
+                    sx={{ cursor: 'pointer' }}
+                  />
+                  <Chip 
+                    label="1D" 
+                    size="small" 
+                    color={selectedTimeframe === '1D' ? 'primary' : 'default'}
+                    onClick={() => handleTimeframeChange('1D')}
+                    sx={{ cursor: 'pointer' }}
+                  />
                   {isLoadingPrice && <Chip label="加载中..." size="small" color="info" />}
                 </Box>
               </Box>
