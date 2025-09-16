@@ -12,6 +12,7 @@ import {
   LineChart,
   Area,
   AreaChart,
+  Cell,
 } from 'recharts';
 
 interface CandlestickData {
@@ -63,6 +64,68 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
   const volumes = data.map(d => d.volume);
   const maxVolume = Math.max(...volumes);
 
+  // 自定义K线渲染
+  const CustomCandlestick = (props: any) => {
+    const { payload, x, y, width, height } = props;
+    if (!payload) return null;
+
+    const { open, high, low, close } = payload;
+    const isGreen = close >= open;
+    const color = isGreen ? '#00D4AA' : '#FF6B6B';
+    
+    // 计算K线位置
+    const bodyHeight = Math.abs(close - open) * (height / (maxPrice - minPrice + padding * 2));
+    const bodyY = y + (maxPrice - Math.max(open, close)) * (height / (maxPrice - minPrice + padding * 2));
+    const wickTop = y + (maxPrice - high) * (height / (maxPrice - minPrice + padding * 2));
+    const wickBottom = y + (maxPrice - low) * (height / (maxPrice - minPrice + padding * 2));
+    const centerX = x + width / 2;
+
+    return (
+      <g>
+        {/* 上影线 */}
+        <line
+          x1={centerX}
+          y1={wickTop}
+          x2={centerX}
+          y2={Math.min(bodyY, bodyY + bodyHeight)}
+          stroke={color}
+          strokeWidth={1}
+        />
+        {/* 下影线 */}
+        <line
+          x1={centerX}
+          y1={Math.max(bodyY, bodyY + bodyHeight)}
+          x2={centerX}
+          y2={wickBottom}
+          stroke={color}
+          strokeWidth={1}
+        />
+        {/* K线实体 */}
+        <rect
+          x={x + width * 0.1}
+          y={bodyY}
+          width={width * 0.8}
+          height={Math.max(bodyHeight, 1)}
+          fill={isGreen ? color : 'transparent'}
+          stroke={color}
+          strokeWidth={1}
+        />
+        {/* 空心K线（下跌时） */}
+        {!isGreen && (
+          <rect
+            x={x + width * 0.1}
+            y={bodyY}
+            width={width * 0.8}
+            height={Math.max(bodyHeight, 1)}
+            fill="transparent"
+            stroke={color}
+            strokeWidth={1}
+          />
+        )}
+      </g>
+    );
+  };
+
   if (showVolume) {
     return (
       <div style={{ width: '100%', height: height }}>
@@ -70,12 +133,6 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
         <div style={{ height: height * 0.7 }}>
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-              <defs>
-                <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#00D4AA" stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor="#00D4AA" stopOpacity={0}/>
-                </linearGradient>
-              </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.1)" />
               <XAxis 
                 dataKey="time" 
@@ -97,21 +154,18 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
                   color: '#FFFFFF',
                 }}
                 formatter={(value: number, name: string) => {
-                  if (name === 'volume') {
-                    return [formatVolume(value), '成交量'];
+                  if (name === 'close') {
+                    return [formatPrice(value), '收盘价'];
                   }
                   return [formatPrice(value), name];
                 }}
                 labelFormatter={(time: string) => `时间: ${time}`}
               />
-              {/* 价格线 */}
-              <Line
-                type="monotone"
+              {/* 使用自定义K线渲染 */}
+              <Bar
                 dataKey="close"
-                stroke="#00D4AA"
-                strokeWidth={2}
-                dot={false}
-                activeDot={{ r: 4, stroke: '#00D4AA', strokeWidth: 2 }}
+                shape={<CustomCandlestick />}
+                fill="transparent"
               />
             </ComposedChart>
           </ResponsiveContainer>
@@ -146,16 +200,10 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
     );
   }
 
-  // 仅显示价格线图（不含成交量）
+  // 仅显示K线图（不含成交量）
   return (
     <ResponsiveContainer width="100%" height={height}>
       <ComposedChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-        <defs>
-          <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="#00D4AA" stopOpacity={0.3}/>
-            <stop offset="95%" stopColor="#00D4AA" stopOpacity={0}/>
-          </linearGradient>
-        </defs>
         <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.1)" />
         <XAxis 
           dataKey="time" 
@@ -179,13 +227,10 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
           formatter={(value: number, name: string) => [formatPrice(value), name]}
           labelFormatter={(time: string) => `时间: ${time}`}
         />
-        <Line
-          type="monotone"
+        <Bar
           dataKey="close"
-          stroke="#00D4AA"
-          strokeWidth={2}
-          dot={false}
-          activeDot={{ r: 4, stroke: '#00D4AA', strokeWidth: 2 }}
+          shape={<CustomCandlestick />}
+          fill="transparent"
         />
       </ComposedChart>
     </ResponsiveContainer>
