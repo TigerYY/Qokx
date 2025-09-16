@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>K线图调试测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #1a1a1a;
+            color: white;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .test-section {
+            background: rgba(26, 26, 26, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .chart-container {
+            height: 400px;
+            background: #222;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+        }
+        .data-display {
+            background: #333;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            margin: 10px 0;
+        }
+        button {
+            padding: 10px 20px;
+            background: #1976d2;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #1565c0;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 6px;
+            margin: 10px 0;
+        }
+        .success {
+            background: rgba(0, 212, 170, 0.2);
+            color: #00D4AA;
+            border: 1px solid #00D4AA;
+        }
+        .error {
+            background: rgba(255, 107, 107, 0.2);
+            color: #FF6B6B;
+            border: 1px solid #FF6B6B;
+        }
+        .kline-demo {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 20px 0;
+        }
+        .kline-item {
+            width: 20px;
+            height: 60px;
+            border: 1px solid #333;
+            position: relative;
+            background: #222;
+        }
+        .kline-body {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 12px;
+            background: #00D4AA;
+            border: 1px solid #00D4AA;
+        }
+        .kline-wick {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 1px;
+            background: #00D4AA;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 K线图调试测试</h1>
+        
+        <div class="test-section">
+            <h2>问题分析</h2>
+            <p>当前K线图显示问题：</p>
+            <ul>
+                <li>❌ 显示的是柱状图，不是K线图</li>
+                <li>❌ 缺少开盘价、最高价、最低价、收盘价的K线显示</li>
+                <li>❌ 自定义K线渲染组件可能没有正确工作</li>
+            </ul>
+        </div>
+
+        <div class="test-section">
+            <h2>API数据测试</h2>
+            <button onclick="testAPI()">测试API数据</button>
+            <button onclick="generateKLineData()">生成K线数据</button>
+            <button onclick="clearData()">清空数据</button>
+            
+            <div id="api-status" class="status">等待测试</div>
+            <div id="data-display" class="data-display"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>K线图演示</h2>
+            <p>标准K线图应该显示：</p>
+            <div class="kline-demo" id="kline-demo">
+                <!-- K线图演示将在这里显示 -->
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>组件调试</h2>
+            <div id="chart-container" class="chart-container">
+                <div>
+                    <h3>K线图组件调试</h3>
+                    <p>检查数据格式和渲染逻辑</p>
+                    <p><strong>当前状态：</strong> <span id="chart-status">等待测试</span></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let testData = [];
+
+        async function testAPI() {
+            try {
+                updateStatus('正在测试API...', 'info');
+                const response = await fetch('http://localhost:8000/market/price-chart?symbol=BTC-USDT&timeframe=1H&limit=24');
+                const data = await response.json();
+                
+                if (data.success) {
+                    testData = data.data;
+                    displayData();
+                    updateStatus('API数据获取成功！', 'success');
+                    generateKLineDemo();
+                } else {
+                    updateStatus('API返回失败: ' + data.message, 'error');
+                }
+            } catch (error) {
+                updateStatus('API请求失败: ' + error.message, 'error');
+            }
+        }
+
+        function generateKLineData() {
+            testData = [];
+            const basePrice = 95000;
+            
+            for (let i = 0; i < 12; i++) {
+                const hour = (18 + i) % 24;
+                const time = `${hour.toString().padStart(2, '0')}:00`;
+                
+                // 生成K线数据
+                const open = basePrice + (Math.random() - 0.5) * 2000;
+                const high = open + Math.random() * 1000;
+                const low = open - Math.random() * 1000;
+                const close = low + Math.random() * (high - low);
+                const volume = 100 + Math.random() * 500;
+                
+                testData.push({
+                    time: time,
+                    open: Math.round(open),
+                    high: Math.round(high),
+                    low: Math.round(low),
+                    close: Math.round(close),
+                    volume: Math.round(volume),
+                    timestamp: Date.now() + i * 3600000
+                });
+            }
+            
+            displayData();
+            updateStatus('K线数据已生成', 'success');
+            generateKLineDemo();
+        }
+
+        function displayData() {
+            const dataDisplay = document.getElementById('data-display');
+            dataDisplay.innerHTML = testData.map((item, index) => 
+                `${index + 1}. ${item.time} - O:$${item.open} H:$${item.high} L:$${item.low} C:$${item.close} V:${item.volume}`
+            ).join('<br>');
+        }
+
+        function generateKLineDemo() {
+            const demoContainer = document.getElementById('kline-demo');
+            demoContainer.innerHTML = '';
+            
+            testData.slice(0, 12).forEach((item, index) => {
+                const klineDiv = document.createElement('div');
+                klineDiv.className = 'kline-item';
+                klineDiv.style.height = '80px';
+                
+                const isGreen = item.close >= item.open;
+                const color = isGreen ? '#00D4AA' : '#FF6B6B';
+                
+                // 计算K线位置
+                const prices = [item.open, item.high, item.low, item.close];
+                const minPrice = Math.min(...prices);
+                const maxPrice = Math.max(...prices);
+                const range = maxPrice - minPrice;
+                
+                const bodyTop = ((maxPrice - Math.max(item.open, item.close)) / range) * 80;
+                const bodyHeight = (Math.abs(item.close - item.open) / range) * 80;
+                const wickTop = ((maxPrice - item.high) / range) * 80;
+                const wickBottom = ((maxPrice - item.low) / range) * 80;
+                
+                // 上影线
+                const wickTopEl = document.createElement('div');
+                wickTopEl.className = 'kline-wick';
+                wickTopEl.style.top = wickTop + 'px';
+                wickTopEl.style.height = (bodyTop - wickTop) + 'px';
+                wickTopEl.style.background = color;
+                klineDiv.appendChild(wickTopEl);
+                
+                // 下影线
+                const wickBottomEl = document.createElement('div');
+                wickBottomEl.className = 'kline-wick';
+                wickBottomEl.style.top = (bodyTop + bodyHeight) + 'px';
+                wickBottomEl.style.height = (wickBottom - (bodyTop + bodyHeight)) + 'px';
+                wickBottomEl.style.background = color;
+                klineDiv.appendChild(wickBottomEl);
+                
+                // K线实体
+                const bodyEl = document.createElement('div');
+                bodyEl.className = 'kline-body';
+                bodyEl.style.top = bodyTop + 'px';
+                bodyEl.style.height = Math.max(bodyHeight, 1) + 'px';
+                bodyEl.style.background = isGreen ? color : 'transparent';
+                bodyEl.style.borderColor = color;
+                klineDiv.appendChild(bodyEl);
+                
+                demoContainer.appendChild(klineDiv);
+            });
+        }
+
+        function clearData() {
+            testData = [];
+            document.getElementById('data-display').innerHTML = '';
+            document.getElementById('kline-demo').innerHTML = '';
+            updateStatus('数据已清空');
+        }
+
+        function updateStatus(message, type = 'info') {
+            const statusElement = document.getElementById('api-status');
+            statusElement.textContent = message;
+            statusElement.className = 'status ' + type;
+        }
+
+        // 初始化
+        updateStatus('等待测试');
+    </script>
+</body>
+</html>
