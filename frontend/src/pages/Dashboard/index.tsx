@@ -48,8 +48,14 @@ const Dashboard: React.FC = () => {
       console.log('价格图表数据响应:', response);
       
       if (response.data.success) {
-        setPriceData(response.data.data);
-        console.log('价格图表数据设置成功:', response.data.data);
+        // 后端已经格式化了时间，直接使用
+        const formattedData = response.data.data.map((candle: any) => ({
+          time: candle.time,
+          price: candle.price
+        }));
+        
+        setPriceData(formattedData);
+        console.log('价格图表数据设置成功:', formattedData);
       } else {
         console.error('价格图表API返回失败:', response.data.message);
       }

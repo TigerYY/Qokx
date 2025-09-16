@@ -611,7 +611,15 @@ async def get_price_chart_data(symbol: str = "BTC-USDT", timeframe: str = "1H", 
         for candle in candles:
             # 转换时间戳为可读格式
             timestamp = int(candle[0])
-            time_str = datetime.fromtimestamp(timestamp / 1000).strftime("%H:%M")
+            dt = datetime.fromtimestamp(timestamp / 1000)
+            
+            # 根据时间框架选择不同的时间格式
+            if timeframe == "1D":
+                time_str = dt.strftime("%m-%d")
+            elif timeframe in ["4H", "1H"]:
+                time_str = dt.strftime("%H:%M")
+            else:
+                time_str = dt.strftime("%H:%M")
             
             chart_data.append({
                 "time": time_str,

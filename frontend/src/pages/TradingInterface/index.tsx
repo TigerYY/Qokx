@@ -80,13 +80,12 @@ const TradingInterface: React.FC = () => {
       console.log('Trading页面：价格数据响应:', response);
       
       if (response.data.success) {
+        // 后端已经格式化了时间，直接使用
         const formattedData = response.data.data.map((candle: any) => ({
-          time: new Date(candle.time).toLocaleTimeString('zh-CN', { 
-            hour: '2-digit', 
-            minute: '2-digit' 
-          }),
+          time: candle.time,
           price: candle.price
         }));
+        
         setPriceData(formattedData);
         console.log('Trading页面：价格数据设置成功:', formattedData);
       } else {
